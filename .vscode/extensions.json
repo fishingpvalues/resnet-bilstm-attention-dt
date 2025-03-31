@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ms-python.python", // Python extension
+    "ms-python.vscode-pylance", // Python language support
+    "charliermarsh.ruff", // Ruff linter/formatter
+    "esbenp.prettier-vscode", // Code formatter
+    "dbaeumer.vscode-eslint", // ESLint for JavaScript/TypeScript, if needed
+    "ms-toolsai.jupyter" // Jupyter notebook support
+  ]
+}

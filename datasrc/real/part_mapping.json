@@ -1,0 +1,11 @@
+{
+    "stopper": 0,
+    "rass1": 1,
+    "pcb": 2,
+    "analog": 3,
+    "rass2": 4,
+    "gyroscope": 5,
+    "rass3": 6,
+    "frontcover": 7,
+    "display": 8
+}

@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Launch main.py",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "UV: Launch main.py",
+      "type": "python",
+      "request": "launch",
+      // This configuration assumes that uv can be invoked as a Python module.
+      // If uv is a standalone command, consider creating a task in tasks.json.
+      "module": "uv",
+      "args": ["run", "${workspaceFolder}/main.py"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
