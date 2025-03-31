@@ -15,4 +15,4 @@ model_graph = torchview.draw_graph(
 model_graph.visual_graph.graph_attr.update(fontname="Times New Roman", fontsize="14")
 model_graph.visual_graph.node_attr.update(fontname="Times New Roman", fontsize="14")
 model_graph.visual_graph.edge_attr.update(fontname="Times New Roman", fontsize="14")
-model_graph.visual_graph
+model_graph.visual_graphgit config user.email "new_email@example.com"
