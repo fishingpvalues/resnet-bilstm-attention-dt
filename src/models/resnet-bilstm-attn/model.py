@@ -1,34 +1,13 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
-from torch.nn.utils.rnn import pad_sequence
-from typing import List, Tuple, Dict
-from sklearn.metrics import roc_auc_score
+from typing import Dict, List, Tuple
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, classification_report
-import math
-
-# --- Time Feature Engineering (applied to final_data) ---
-# Convert start_time and end_time to datetime with UTC
-final_data["start_time"] = pd.to_datetime(final_data["start_time"], utc=True)
-final_data["end_time"] = pd.to_datetime(final_data["end_time"], utc=True)
-
-# Convert datetime to Unix timestamps (in seconds)
-final_data["start_time_unix"] = final_data["start_time"].view("int64") / 10**9
-final_data["end_time_unix"] = final_data["end_time"].view("int64") / 10**9
-
-# Create periodic time features
-final_data["day_of_week"] = final_data["start_time"].dt.weekday
-final_data["hour_of_day"] = final_data["start_time"].dt.hour
-
-final_data["day_of_week_sin"] = np.sin(2 * np.pi * final_data["day_of_week"] / 7)
-final_data["day_of_week_cos"] = np.cos(2 * np.pi * final_data["day_of_week"] / 7)
-final_data["hour_of_day_sin"] = np.sin(2 * np.pi * final_data["hour_of_day"] / 24)
-final_data["hour_of_day_cos"] = np.cos(2 * np.pi * final_data["hour_of_day"] / 24)
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.metrics import roc_auc_score
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader, Dataset
 
 
 # --- Model Definition ---

@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 # Add the src folder to Python path so that modules under 'data' can be imported.
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -8,14 +8,15 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 import pandas as pd
+
+from data.featureeng import add_kpi_features
+from data.filter import filter_data
 from data.preprocessing import (
     unify_and_drop_part_ids,
     unify_and_drop_process_types,
     unify_and_filter_resources,
 )
-from data.filter import filter_data, is_not_weekday, is_break
-from data.featureeng import add_kpi_features
-
+from models.resnet_bilstm_attn.model import *
 
 if __name__ == "__main__":
     real_data = pd.read_csv(
