@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["pandas",
+dependencies = [
+    "pandas",
     "numpy",
     "matplotlib",
     "scikit-learn",
@@ -12,4 +13,7 @@ dependencies = ["pandas",
     "holidays",
     "graphviz",
     "torchview",
-    "seaborn"]
+    "seaborn",
+]
+[tool.setuptools]
+package-dir = {"" = "src"}

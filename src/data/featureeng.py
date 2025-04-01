@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import timedelta
-from kpi_utils import KPIFactory
+from src.utils.kpi_utils import KPIFactory
 
 
 def add_kpi_features(final_data: pd.DataFrame) -> pd.DataFrame:
@@ -61,7 +61,3 @@ def add_kpi_features(final_data: pd.DataFrame) -> pd.DataFrame:
     df = df.groupby("order_id", group_keys=False).apply(compute_order_kpis)
 
     return df
-
-
-final_data = add_kpi_features(final_data)
-print(final_data.head())
