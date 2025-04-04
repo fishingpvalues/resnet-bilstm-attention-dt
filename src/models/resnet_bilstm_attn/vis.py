@@ -9,7 +9,7 @@ def plot(model):
         model,
         input_data=torch.randn(1, 19, 10),
         roll=True,
-        graph_name="xLSTM for VVUQ",
+        graph_name="BiLSTM for VVUQ",
         graph_dir="TB",
         save_graph=True,
         expand_nested=True,

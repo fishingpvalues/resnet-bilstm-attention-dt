@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 # Assuming the helper functions are defined elsewhere in this module or imported:
@@ -56,8 +56,8 @@ def filter_data(df: pd.DataFrame) -> pd.DataFrame:
     filtered["end_time"] = pd.to_datetime(filtered["end_time"], utc=True)
 
     # Create Unix timestamp columns.
-    filtered["start_time_unix"] = filtered["start_time"].view("int64") / 10**9
-    filtered["end_time_unix"] = filtered["end_time"].view("int64") / 10**9
+    filtered["start_time_unix"] = filtered["start_time"].astype("int64") / 10**9
+    filtered["end_time_unix"] = filtered["end_time"].astype("int64") / 10**9
 
     # Create periodic time features.
     filtered["day_of_week"] = filtered["start_time"].dt.weekday

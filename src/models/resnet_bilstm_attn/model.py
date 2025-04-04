@@ -1,21 +1,19 @@
 from typing import Dict, List, Tuple
 
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 
 # --- Model Definition ---
-class xLSTM(nn.Module):
+class BiLSTM(nn.Module):
     def __init__(
         self, input_size: int, hidden_size: int, num_layers: int, attention_heads: int
     ):
-        super(xLSTM, self).__init__()
+        super(BiLSTM, self).__init__()
 
         self.lstm_layers = nn.ModuleList(
             [
@@ -66,51 +64,9 @@ class xLSTM(nn.Module):
         return torch.sigmoid(self.fc(x))
 
 
-# --- Dataset Definition ---
-class XLSTMDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, sequence_length: int):
-        self.sequence_length = sequence_length
-        self.data = df.copy()
-        self.samples = [
-            self.data.iloc[i : i + sequence_length]
-            for i in range(len(self.data) - sequence_length + 1)
-        ]
-        print("Initialized XLSTMDataset with samples:", len(self.samples))
-
-        # Define feature and target columns (ensure these exist in your DataFrame)
-        self.feature_columns = [
-            "duration",
-            "part_id",
-            "process_type",
-            "process_id",
-            "resource_id",
-            "sequence_number",
-            "day_of_week_sin",
-            "day_of_week_cos",
-            "hour_of_day_sin",
-            "hour_of_day_cos",
-            "is_not_weekday",
-            "is_break",  # TODO: Add KPI Features to df and convert to right dtype. Right now I get error
-        ]
-        self.target_column = "is_valid"
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        sample_df = self.samples[idx]
-        features = (
-            sample_df[self.feature_columns].astype(float).values.astype(np.float32)
-        )
-        target = int(sample_df[self.target_column].values[0])
-        return torch.tensor(features, dtype=torch.float32), torch.tensor(
-            target, dtype=torch.long
-        )
-
-
 # --- Training and Evaluation Functions (unchanged) ---
 def train_model(
-    model: xLSTM,
+    model: BiLSTM,
     dataloader: DataLoader,
     num_epochs: int = 10,
     learning_rate: float = 0.001,
@@ -150,7 +106,7 @@ def train_model(
 
 
 def evaluate_model(
-    model: xLSTM,
+    model: BiLSTM,
     dataloader: DataLoader,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> Dict[str, float]:
@@ -215,36 +171,3 @@ def evaluate_model_with_preds(
             all_preds.extend(preds)
             all_labels.extend(labels.cpu().numpy().tolist())
     return all_labels, all_preds, all_probs
-
-
-# --- Prepare Data and Train the Model ---
-df_train_mod = pd.concat([X_train, y_train], axis=1)
-df_test_mod = pd.concat([X_test, y_test], axis=1)
-
-train_dataset = XLSTMDataset(df_train_mod, sequence_length=19)
-test_dataset = XLSTMDataset(df_test_mod, sequence_length=19)
-
-train_loader = DataLoader(
-    train_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn
-)
-test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
-
-print("CUDA IS AVAILABLE?", torch.cuda.is_available())
-print("Train dataset size:", len(train_dataset))
-print("df_train_mod shape:", df_train_mod.shape)
-
-model = xLSTM(
-    input_size=12, hidden_size=512, num_layers=1, attention_heads=4
-)  # Change input size to match your features
-loss_history = train_model(model, train_loader, num_epochs=50)
-metrics = evaluate_model(model, test_loader)
-print("Test Accuracy:", metrics["accuracy"])
-print("Test ROC AUC:", metrics["roc_auc"])
-
-diagnose_model(loss_history, metrics["accuracy"])
-
-all_labels, all_preds, all_probs = evaluate_model_with_preds(model, test_loader)
-generate_report(all_labels, all_preds, all_probs)
-
-torch.save(model.state_dict(), "xLSTM_model.pth")
-print("Model saved.")

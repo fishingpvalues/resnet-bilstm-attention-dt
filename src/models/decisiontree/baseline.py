@@ -7,7 +7,7 @@ from sklearn.tree import DecisionTreeClassifier, export_graphviz
 def run_decision_tree_pipeline(
     final_data,
     max_depth=5,
-    random_state=683,
+    random_state=42,
     test_size=0.2,
     report_fn=None,
     output_fn="decision_tree",
@@ -81,25 +81,3 @@ def run_decision_tree_pipeline(
     graph.view()  # Opens the generated file in a viewer
 
     return dt, (X_train, y_train, X_test, y_test), (y_pred, y_proba)
-
-
-if __name__ == "__main__":
-    # For testing the pipeline directly.
-    import pandas as pd
-
-    # Replace the following line with actual data loading as needed.
-    final_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\final_data.csv",
-        parse_dates=["start_time", "end_time"],
-    )
-
-    # Example simple report function.
-    def generate_report(y_true, y_pred, y_proba):
-        from sklearn.metrics import classification_report, roc_auc_score
-
-        print(classification_report(y_true, y_pred))
-        print("ROC-AUC:", roc_auc_score(y_true, y_proba))
-
-    run_decision_tree_pipeline(
-        final_data, max_depth=5, random_state=683, report_fn=generate_report
-    )

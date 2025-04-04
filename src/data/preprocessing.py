@@ -1,36 +1,5 @@
 import pandas as pd
 
-# Load data with process_execution_id as index and proper datetime parsing.
-
-
-real_data = pd.read_csv(
-    r"C:\ofact-intern\projects\iot_factory\val\data\real_factorydata_oclog.csv",
-    parse_dates=["start_time", "end_time"],
-    index_col="process_execution_id",
-)
-
-
-# NOT THE SAME TIME HORIZON
-
-
-sim_data = pd.read_csv(
-    r"C:\ofact-intern\projects\iot_factory\val\data\simulated_data_oclog.csv",
-    parse_dates=["start_time", "end_time"],
-    index_col="process_execution_id",
-)
-
-
-# set all is valid values to 0 in sim_data
-
-
-sim_data["is_valid"] = 0
-
-
-sim_data["duration"] = sim_data["end_time"] - sim_data["start_time"]
-
-
-sim_data["duration"] = sim_data["duration"].dt.total_seconds()
-
 
 def unify_and_drop_part_ids(real_data: pd.DataFrame) -> pd.DataFrame:
     # Define the main mapping (correct mapping)
@@ -99,9 +68,6 @@ def unify_and_drop_part_ids(real_data: pd.DataFrame) -> pd.DataFrame:
     return unified_data
 
 
-real_data = unify_and_drop_part_ids(real_data)
-
-
 def unify_and_drop_process_types(real_data: pd.DataFrame) -> pd.DataFrame:
     # Main (correct) mapping for process_type.
     main_mapping = {"machine": 0, "feature": 1, "endproduct": 2}
@@ -145,7 +111,6 @@ def unify_and_drop_process_types(real_data: pd.DataFrame) -> pd.DataFrame:
     return unified_data
 
 
-real_data = unify_and_drop_process_types(real_data)
 # Define the wrong mapping (used in real data) and create its reverse:
 wrong_mapping = {
     "CP-MOBI-WORK-DOCK": 0,
@@ -214,7 +179,3 @@ def unify_and_filter_resources(df: pd.DataFrame) -> pd.DataFrame:
     df["resource_id"] = df["updated_resource_id"]
     df.drop(columns=["updated_resource_id"], inplace=True)
     return df
-
-
-# Update final_data: keep only rows whose resource can be unified and mapped.
-real_data = unify_and_filter_resources(real_data)
