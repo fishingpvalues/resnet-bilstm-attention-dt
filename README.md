@@ -51,7 +51,7 @@ Data contains detailed manufacturing operations including:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git](https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git)
+    git clone https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git
     cd resnet-bilstm-attention-dt
     ```
 
