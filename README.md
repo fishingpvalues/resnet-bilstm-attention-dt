@@ -6,6 +6,8 @@ A deep learning framework that combines Residual Networks (ResNet), Bidirectiona
 
 This project implements a hybrid deep learning architecture to analyze manufacturing data from CP Factory systems. It validates manufacturing processes by comparing real production data with simulated data from a digital twin to identify discrepancies and anomalies in process execution.
 
+![Class Diagram](classes.png)
+
 ## Architecture
 
 The model combines three advanced deep learning components:
@@ -87,3 +89,42 @@ This command will execute two pipelines:
 - `src/models/decisiontree/`: Baseline model implementation
 - `src/data/`: Data processing and feature engineering tools
 - `src/utils/reporting.py`: Visualization and metrics reporting
+
+## Decision Tree
+
+- Fits fast because of time feature
+
+## ResNet Bi-LSTM Attention Network
+
+- 10 Epochs sufficient
+
+## File Tree
+
+```txt
+ResNet-BiLSTM-Attention-DT/
+├── README.md [README.md](d:\resnet-bilstm-attention-dt\README.md)
+├── LICENSE
+├── datasrc/
+│   ├── real/
+│   │   ├── real_factorydata.csv
+│   │   └── real_factorydata_oclog.csv
+│   └── sim/
+│       └── simulated_data_oclog.csv
+├── src/
+│   ├── main.py
+│   ├── validate.ipynb
+│   ├── connector/
+│   │   └── ofact/
+│   │       └── _put_in_ofact_project_folder/
+│   │           └── output_structure.py
+│   ├── models/
+│   │   ├── resnet_bilstm_attn/     <— Deep learning model implementation
+│   │   └── decisiontree/           <— Baseline model implementation
+│   ├── data/                     <— Data processing and feature engineering tools
+│   └── utils/
+│       └── reporting.py
+├── puml_output/
+│   ├── classes.puml
+│   └── packages.puml
+└── decision_tree/                <— Contains decision tree related resources
+```
