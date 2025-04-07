@@ -51,7 +51,7 @@ Data contains detailed manufacturing operations including:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/resnet-bilstm-attention-dt.git
+git clone https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git
 cd resnet-bilstm-attention-dt
 
 # Using UV
@@ -100,7 +100,7 @@ This command will execute two pipelines:
 
 ## File Tree
 
-```txt
+```text
 ResNet-BiLSTM-Attention-DT/
 ├── README.md [README.md](d:\resnet-bilstm-attention-dt\README.md)
 ├── LICENSE
