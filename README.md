@@ -49,27 +49,67 @@ Data contains detailed manufacturing operations including:
 
 ## Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git
-cd resnet-bilstm-attention-dt
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git](https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git)
+    cd resnet-bilstm-attention-dt
+    ```
 
-# Using UV
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip sync
+2.  **Set up the environment and install dependencies:** Choose **one** of the following methods:
 
-# Or install directly from pyproject.toml
-uv pip install -e .
-```
+    **Method A: Using UV (Recommended for exact reproducibility)**
+
+    This method uses the `uv.lock` file to install the exact dependency versions.
+
+    ```bash
+    # Create a virtual environment using uv
+    uv venv
+
+    # Activate the virtual environment
+    # Linux/macOS:
+    source .venv/bin/activate
+    # Windows CMD:
+    # .venv\Scripts\activate.bat
+    # Windows PowerShell:
+    # .venv\Scripts\Activate.ps1
+
+    # Sync the environment using the uv.lock file
+    uv sync
+    ```
+
+    **Method B: Using standard Python pip**
+
+    This method uses `pyproject.toml` to install dependencies. Note that `pip` **will not** use the `uv.lock` file, so dependency versions might differ from the locked versions if newer compatible versions are available.
+
+    ```bash
+    # Create a virtual environment using Python's built-in venv
+    python -m venv .venv
+
+    # Activate the virtual environment
+    # Linux/macOS:
+    source .venv/bin/activate
+    # Windows CMD:
+    # .venv\Scripts\activate.bat
+    # Windows PowerShell:
+    # .venv\Scripts\Activate.ps1
+
+    # Upgrade pip (optional but recommended)
+    pip install --upgrade pip
+
+    # Install the project and its dependencies from pyproject.toml
+    # Use -e for an "editable" install (links to your source code)
+    pip install -e .
+
+    # Alternatively, for a standard install:
+    # pip install .
+    ```
 
 ## Usage
 
-Run the main script to preprocess data, train models, and evaluate results:
+Once installed, run the main script:
 
 ```bash
 python main.py
-```
 
 This command will execute two pipelines:
 
