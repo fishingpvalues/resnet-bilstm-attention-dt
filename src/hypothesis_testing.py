@@ -12,6 +12,9 @@ import sys
 import time
 from tqdm import tqdm
 import random
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # Add the parent directory to sys.path to import other modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
