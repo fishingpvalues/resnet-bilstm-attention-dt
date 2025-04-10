@@ -5,8 +5,10 @@ import time
 import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
@@ -303,8 +305,18 @@ def permutation_test(
     if len(set(y_train.unique())) < 2 or len(set(y_test.unique())) < 2:
         raise ValueError("Both training and test sets must contain both classes")
 
-    # Train model on original data
-    model = model_train_func(X_train, y_train, **model_kwargs)
+    # Extract model training parameters based on model type
+    train_kwargs = {}
+    if model_type.lower() == "dt":
+        # Only pass parameters that train_decision_tree accepts
+        dt_params = ["max_depth", "random_state"]
+        train_kwargs = {k: v for k, v in model_kwargs.items() if k in dt_params}
+    else:
+        # LSTM model can receive all parameters
+        train_kwargs = model_kwargs
+
+    # Train model on original data with appropriate parameters
+    model = model_train_func(X_train, y_train, **train_kwargs)
 
     # Generate predictions once
     if model_type.lower() == "dt":
@@ -531,7 +543,17 @@ def multiple_runs_hypothesis_test(
                     df, features, test_size=test_size, random_state=random_seed
                 )
 
-                # Run permutation test
+                # Create a complete kwargs dictionary with both model and tracking parameters
+                run_kwargs = model_kwargs.copy()  # Start with the model parameters
+                run_kwargs.update(
+                    {  # Add tracking parameters
+                        "component": component,
+                        "run_id": run + 1,
+                        "output_dir": model_output_dir,
+                    }
+                )
+
+                # Pass all parameters through a single kwargs dictionary
                 observed_stat, p_value, _ = permutation_test(
                     model_train_func,
                     X_train,
@@ -541,10 +563,8 @@ def multiple_runs_hypothesis_test(
                     metric=metric,
                     n_permutations=n_permutations,
                     model_type=model_type,
-                    component=component,  # Add component name
-                    run_id=run + 1,  # Add run id
-                    output_dir=model_output_dir,  # Add output directory
-                    **model_kwargs,
+                    verbose=True,
+                    **run_kwargs,
                 )
 
                 # Store results
@@ -621,6 +641,20 @@ def multiple_runs_hypothesis_test(
 
     print(f"\nResults saved to: {result_file}")
 
+    # Generate plots for each component
+    print("\nGenerating plots...")
+    for component in feature_subsets.keys():
+        try:
+            generate_hypothesis_test_plots(model_output_dir, component)
+        except Exception as e:
+            print(f"Error generating plots for {component}: {e}")
+
+    # Generate summary plots
+    try:
+        generate_summary_plots(results, model_output_dir, metric, model_type)
+    except Exception as e:
+        print(f"Error generating summary plots: {e}")
+
     return results
 
 
@@ -674,6 +708,251 @@ def define_feature_subsets() -> Dict[str, List[str]]:
     }
 
 
+def generate_hypothesis_test_plots(
+    results_dir: str, component_name: str, run_id: int = None
+):
+    """
+    Generate plots for hypothesis testing results.
+
+    Args:
+        results_dir: Directory containing the null distribution CSV files
+        component_name: Name of the SBDT component to plot
+        run_id: If provided, plot only this specific run; otherwise plot all runs
+    """
+    # Set up plot style
+    plt.style.use("seaborn-v0_8-whitegrid")
+    sns.set_context("talk")
+
+    if run_id is not None:
+        # Plot specific run
+        run_files = [f"{component_name}_run{run_id}_null_dist.csv"]
+    else:
+        # Find all files for this component
+        import glob
+
+        run_files = glob.glob(f"{results_dir}/{component_name}_run*_null_dist.csv")
+        run_files = [os.path.basename(f) for f in run_files]
+
+    for file_name in run_files:
+        try:
+            # Load the null distribution
+            file_path = os.path.join(results_dir, file_name)
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                continue
+
+            null_dist_df = pd.read_csv(file_path)
+
+            if "observed_stat" in null_dist_df.columns:
+                # New format with observed_stat column
+                observed_stat = null_dist_df["observed_stat"].iloc[0]
+                p_value = (
+                    null_dist_df["p_value"].iloc[0]
+                    if "p_value" in null_dist_df.columns
+                    else None
+                )
+                null_dist = null_dist_df["permutation_stat"].values
+            else:
+                # Old format with just permutation_stat
+                null_dist = null_dist_df["permutation_stat"].values
+                # Calculate observed_stat and p_value (if needed)
+                observed_stat = null_dist.mean() + null_dist.std()  # Placeholder
+                p_value = None
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+            # Plot histogram of null distribution
+            sns.histplot(
+                null_dist,
+                kde=True,
+                ax=ax,
+                color="skyblue",
+                stat="density",
+                label="Null Distribution",
+            )
+
+            # Add vertical line for observed statistic
+            ax.axvline(
+                x=observed_stat,
+                color="red",
+                linestyle="--",
+                label=f"Observed Statistic: {observed_stat:.4f}",
+            )
+
+            # Add title and labels
+            current_run = file_name.split("_run")[1].split("_")[0]
+            ax.set_title(f"Permutation Test for {component_name} (Run {current_run})")
+            ax.set_xlabel("Test Statistic")
+            ax.set_ylabel("Density")
+
+            # Add legend
+            legend_text = f"Observed: {observed_stat:.4f}"
+            if p_value is not None:
+                legend_text += f", p-value: {p_value:.4f}"
+            ax.text(
+                0.02,
+                0.95,
+                legend_text,
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            )
+
+            plt.legend()
+            plt.tight_layout()
+
+            # Save the plot
+            output_file = os.path.join(
+                results_dir, f"{component_name}_run{current_run}_permutation_test.png"
+            )
+            plt.savefig(output_file, dpi=300)
+            print(f"Plot saved to: {output_file}")
+            plt.close()
+
+        except Exception as e:
+            print(f"Error generating plot for {file_name}: {e}")
+
+
+def generate_summary_plots(
+    results: Dict[str, Dict[str, Union[List[float], float]]],
+    output_dir: str,
+    metric: str,
+    model_type: str,
+):
+    """
+    Generate summary plots comparing all SBDT components.
+
+    Args:
+        results: Results dictionary from multiple_runs_hypothesis_test
+        output_dir: Directory to save plots
+        metric: Metric used (accuracy or roc_auc)
+        model_type: Type of model (dt or lstm)
+    """
+    # Set up plot style
+    plt.style.use("seaborn-v0_8-whitegrid")
+    sns.set_context("talk")
+
+    # Extract data for plotting
+    components = []
+    means = []
+    stds = []
+    p_values = []
+    rejection_rates = []
+
+    for component, res in results.items():
+        components.append(component)
+        means.append(res.get("mean_observed_stat", float("nan")))
+        stds.append(res.get("std_observed_stat", float("nan")))
+        p_values.append(res.get("mean_p_value", float("nan")))
+        rejection_rates.append(res.get("rejection_rate", 0))
+
+    # Create a DataFrame for easier plotting
+    df = pd.DataFrame(
+        {
+            "Component": components,
+            f"Mean {metric}": means,
+            f"Std {metric}": stds,
+            "Mean p-value": p_values,
+            "Rejection Rate": rejection_rates,
+        }
+    )
+
+    # 1. Plot Mean Metric Values with Error Bars
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(
+        df["Component"],
+        df[f"Mean {metric}"],
+        yerr=df[f"Std {metric}"],
+        capsize=10,
+        color="skyblue",
+        alpha=0.8,
+    )
+
+    # Add a horizontal line at 0.5 (random chance for classification)
+    ax.axhline(
+        y=0.5, color="red", linestyle="--", alpha=0.7, label="Random Chance (0.5)"
+    )
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.4f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Mean {metric.upper()} by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel(f"{metric.upper()}")
+    ax.set_ylim(0, 1.05)
+    plt.xticks(rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(output_dir, f"{model_type}_{metric}_by_component.png"), dpi=300
+    )
+    plt.close()
+
+    # 2. Plot Rejection Rates
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(df["Component"], df["Rejection Rate"], color="salmon", alpha=0.8)
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.2f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Rejection Rate by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel("Rejection Rate")
+    ax.set_ylim(0, 1.05)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"{model_type}_rejection_rates.png"), dpi=300)
+    plt.close()
+
+    # 3. Plot p-values
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(df["Component"], df["Mean p-value"], color="lightgreen", alpha=0.8)
+
+    # Add a horizontal line at 0.05 (common significance level)
+    ax.axhline(y=0.05, color="red", linestyle="--", alpha=0.7, label="α = 0.05")
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.4f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Mean p-value by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel("Mean p-value")
+    ax.set_ylim(0, max(1.0, df["Mean p-value"].max() + 0.1))
+    plt.xticks(rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"{model_type}_p_values.png"), dpi=300)
+    plt.close()
+
+    print(f"Summary plots saved to: {output_dir}")
+
+
 if __name__ == "__main__":
     # Load and preprocess data
     print("Loading and preprocessing data...")
@@ -721,3 +1000,15 @@ if __name__ == "__main__":
         print(
             f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )
+
+    # Generate plots for existing results (optional - add this if you want to generate plots for already saved data)
+    model_type = "lstm"  # Change as needed to dt or lstm
+    results_dir = f"hypothesis_results/{model_type}"
+
+    if os.path.exists(results_dir):
+        print("\nGenerating plots for existing results...")
+        for component in feature_subsets.keys():
+            try:
+                generate_hypothesis_test_plots(results_dir, component)
+            except Exception as e:
+                print(f"Error generating plots for {component}: {e}")
