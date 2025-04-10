@@ -14,6 +14,8 @@ dependencies = [
     "graphviz",
     "torchview",
     "seaborn",
+    "pylint>=3.3.6",
+    "py2puml>=0.10.0",
 ]
 [tool.setuptools]
 package-dir = {"" = "src"}

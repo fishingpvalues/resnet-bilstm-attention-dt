@@ -1,0 +1,91 @@
+@startuml packages
+set namespaceSeparator none
+package "analyze_orders" as analyze_orders {
+}
+package "baseline" as baseline {
+}
+package "connect" as connect {
+}
+package "dataset" as dataset {
+}
+package "exclude_orders" as exclude_orders {
+}
+package "featureeng" as featureeng {
+}
+package "filter" as filter {
+}
+package "input_structure" as input_structure {
+}
+package "kpi_utils" as kpi_utils {
+}
+package "learn_resource_settings" as learn_resource_settings {
+}
+package "model" as model {
+}
+package "output_structure" as output_structure {
+}
+package "preprocessing" as preprocessing {
+}
+package "reporting" as reporting {
+}
+package "test_connector" as test_connector {
+}
+package "time_conversion" as time_conversion {
+}
+package "vis" as vis {
+}
+connect --> output_structure
+test_connector --> output_structure
+@enduml
+@startuml classes
+set namespaceSeparator none
+class "BiLSTM" as model.BiLSTM {
+  attention_layers : ModuleList
+  fc : Sequential
+  layer_norm : LayerNorm
+  lstm_layers : ModuleList
+  residual : Linear
+  forward(x)
+}
+class "BiLSTMDataset" as dataset.BiLSTMDataset {
+  data
+  feature_columns : list
+  samples
+  sequence_length : int
+  target_column : str
+}
+class "CSVConnector" as test_connector.CSVConnector {
+  csv_path : Path
+  output_dir : Path
+  output_structure : DataFrame
+  connect() -> pd.DataFrame
+}
+class "Connector" as connect.Connector {
+  dynamic_state_model_pickle
+  output_dir : Path
+  output_structure : DataFrame
+  connect() -> pd.DataFrame
+}
+class "KPIFactory" as kpi_utils.KPIFactory {
+  calc_cycle_time(df: pd.DataFrame) -> pd.DataFrame
+  calc_lead_time(df: pd.DataFrame) -> pd.DataFrame
+  calc_overall_time_window(df: pd.DataFrame) -> Tuple[pd.Timestamp, pd.Timestamp]
+  calc_setup_time(df: pd.DataFrame) -> timedelta
+  calc_throughput(df: pd.DataFrame, time_unit: str) -> float
+  validate_columns(df: pd.DataFrame, required_cols: List[str]) -> None
+}
+class "OutputStructure" as output_structure.OutputStructure {
+  end_time : str
+  is_valid : bool
+  order_id : str
+  part_id : str
+  process_execution_id : str
+  process_id : str
+  resource_id : str
+  start_time : str
+  type : str
+  convert_columns(df: pd.DataFrame) -> pd.DataFrame
+  create_dataframe() -> pd.DataFrame
+  to_dict() -> dict
+}
+@enduml

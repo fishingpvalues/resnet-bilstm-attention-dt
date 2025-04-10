@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import timedelta
+
 from src.utils.kpi_utils import KPIFactory
 
 
@@ -26,8 +26,10 @@ def add_kpi_features(final_data: pd.DataFrame) -> pd.DataFrame:
     # --- LEAD TIME ---
     # Calculate lead time per (order_id, part_id) from earliest start to latest end.
     lead_df = KPIFactory.calc_lead_time(df)
-    # Convert lead_time from timedelta to seconds.
-    lead_df["lead_time_sec"] = lead_df["lead_time"].dt.total_seconds()
+    # Convert lead_time to seconds safely
+    lead_df["lead_time_sec"] = lead_df["lead_time"].apply(
+        lambda x: x.total_seconds() if hasattr(x, "total_seconds") else x
+    )
     lead_df = lead_df[["order_id", "part_id", "lead_time_sec"]]
 
     # --- CYCLE TIME ---
@@ -51,7 +53,7 @@ def add_kpi_features(final_data: pd.DataFrame) -> pd.DataFrame:
         # Setup time: sum of durations for processes with process_type == 1.
         setup_td = KPIFactory.calc_setup_time(group)
         setup_sec = (
-            setup_td.total_seconds() if isinstance(setup_td, timedelta) else setup_td
+            setup_td.total_seconds() if hasattr(setup_td, "total_seconds") else setup_td
         )
         group = group.copy()
         group["throughput"] = throughput

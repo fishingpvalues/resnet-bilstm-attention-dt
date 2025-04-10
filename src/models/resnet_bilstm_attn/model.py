@@ -1,34 +1,11 @@
+from typing import Dict, List, Tuple
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
-from torch.nn.utils.rnn import pad_sequence
-from typing import List, Tuple, Dict
 from sklearn.metrics import roc_auc_score
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, classification_report
-import math
-
-# --- Time Feature Engineering (applied to final_data) ---
-# Convert start_time and end_time to datetime with UTC
-final_data["start_time"] = pd.to_datetime(final_data["start_time"], utc=True)
-final_data["end_time"] = pd.to_datetime(final_data["end_time"], utc=True)
-
-# Convert datetime to Unix timestamps (in seconds)
-final_data["start_time_unix"] = final_data["start_time"].view("int64") / 10**9
-final_data["end_time_unix"] = final_data["end_time"].view("int64") / 10**9
-
-# Create periodic time features
-final_data["day_of_week"] = final_data["start_time"].dt.weekday
-final_data["hour_of_day"] = final_data["start_time"].dt.hour
-
-final_data["day_of_week_sin"] = np.sin(2 * np.pi * final_data["day_of_week"] / 7)
-final_data["day_of_week_cos"] = np.cos(2 * np.pi * final_data["day_of_week"] / 7)
-final_data["hour_of_day_sin"] = np.sin(2 * np.pi * final_data["hour_of_day"] / 24)
-final_data["hour_of_day_cos"] = np.cos(2 * np.pi * final_data["hour_of_day"] / 24)
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader
 
 
 # --- Model Definition ---
@@ -85,48 +62,6 @@ class BiLSTM(nn.Module):
             x = F.relu(x + residual)
         x = torch.mean(x, dim=1)
         return torch.sigmoid(self.fc(x))
-
-
-# --- Dataset Definition ---
-class BiLSTMDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, sequence_length: int):
-        self.sequence_length = sequence_length
-        self.data = df.copy()
-        self.samples = [
-            self.data.iloc[i : i + sequence_length]
-            for i in range(len(self.data) - sequence_length + 1)
-        ]
-        print("Initialized BiLSTMDataset with samples:", len(self.samples))
-
-        # Define feature and target columns (ensure these exist in your DataFrame)
-        self.feature_columns = [
-            "duration",
-            "part_id",
-            "process_type",
-            "process_id",
-            "resource_id",
-            "sequence_number",
-            "day_of_week_sin",
-            "day_of_week_cos",
-            "hour_of_day_sin",
-            "hour_of_day_cos",
-            "is_not_weekday",
-            "is_break",  # TODO: Add KPI Features to df and convert to right dtype. Right now I get error
-        ]
-        self.target_column = "is_valid"
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        sample_df = self.samples[idx]
-        features = (
-            sample_df[self.feature_columns].astype(float).values.astype(np.float32)
-        )
-        target = int(sample_df[self.target_column].values[0])
-        return torch.tensor(features, dtype=torch.float32), torch.tensor(
-            target, dtype=torch.long
-        )
 
 
 # --- Training and Evaluation Functions (unchanged) ---
@@ -236,36 +171,3 @@ def evaluate_model_with_preds(
             all_preds.extend(preds)
             all_labels.extend(labels.cpu().numpy().tolist())
     return all_labels, all_preds, all_probs
-
-
-# --- Prepare Data and Train the Model ---
-df_train_mod = pd.concat([X_train, y_train], axis=1)
-df_test_mod = pd.concat([X_test, y_test], axis=1)
-
-train_dataset = BiLSTMDataset(df_train_mod, sequence_length=19)
-test_dataset = BiLSTMDataset(df_test_mod, sequence_length=19)
-
-train_loader = DataLoader(
-    train_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn
-)
-test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
-
-print("CUDA IS AVAILABLE?", torch.cuda.is_available())
-print("Train dataset size:", len(train_dataset))
-print("df_train_mod shape:", df_train_mod.shape)
-
-model = BiLSTM(
-    input_size=12, hidden_size=512, num_layers=1, attention_heads=4
-)  # Change input size to match your features
-loss_history = train_model(model, train_loader, num_epochs=50)
-metrics = evaluate_model(model, test_loader)
-print("Test Accuracy:", metrics["accuracy"])
-print("Test ROC AUC:", metrics["roc_auc"])
-
-diagnose_model(loss_history, metrics["accuracy"])
-
-all_labels, all_preds, all_probs = evaluate_model_with_preds(model, test_loader)
-generate_report(all_labels, all_preds, all_probs)
-
-torch.save(model.state_dict(), "BiLSTM_model.pth")
-print("Model saved.")
