@@ -21,11 +21,13 @@ if parent_dir not in sys.path:
 
 from src.models.resnet_bilstm_attn.model import (
     BiLSTM,
-    BiLSTMDataset,
     collate_fn,
     train_model,
     evaluate_model,
     evaluate_model_with_preds,
+)
+from src.models.resnet_bilstm_attn.dataset_hypothesistesting import (
+    BiLSTMDatasetHypothesis,
 )
 from src.data.preprocessing import (
     unify_and_drop_part_ids,
@@ -54,22 +56,38 @@ def load_and_preprocess_data() -> pd.DataFrame:
         index_col="process_execution_id",
     )
 
-    # Set the target variable: 0 for simulated, 1 for real data
-    sim_data["is_valid"] = 0
+    # Set target variable and calculate duration for real data
     real_data["is_valid"] = 1
+    real_data["duration"] = (
+        real_data["end_time"] - real_data["start_time"]
+    ).dt.total_seconds()
+    print(f"Real data shape: {real_data.shape}")
 
-    # Calculate duration for simulated data
+    # Set target variable and calculate duration for simulated data
+    sim_data["is_valid"] = 0
     sim_data["duration"] = (
         sim_data["end_time"] - sim_data["start_time"]
     ).dt.total_seconds()
+    print(f"Simulated data shape: {sim_data.shape}")
 
-    # Apply preprocessing functions to real data
+    # Apply preprocessing functions only to real data
     real_data = unify_and_drop_part_ids(real_data)
     real_data = unify_and_drop_process_types(real_data)
     real_data = unify_and_filter_resources(real_data)
+    real_data = filter_data(real_data)
 
-    # Combine datasets and apply additional preprocessing
-    final_data = filter_data(pd.concat([real_data, sim_data]).fillna(0))
+    # Combine datasets
+    final_data = pd.concat([real_data, sim_data]).fillna(0)
+
+    # Ensure time columns are datetime
+    final_data["start_time"] = pd.to_datetime(
+        final_data["start_time"], utc=True, errors="coerce"
+    )
+    final_data["end_time"] = pd.to_datetime(
+        final_data["end_time"], utc=True, errors="coerce"
+    )
+
+    # Apply KPI features and sort
     final_data = (
         add_kpi_features(final_data)
         .sort_values(
@@ -78,6 +96,7 @@ def load_and_preprocess_data() -> pd.DataFrame:
         )
         .reset_index(drop=True)
     )
+    print(f"is_valid counts: {final_data['is_valid'].value_counts().to_dict()}")
 
     return final_data
 
@@ -90,27 +109,34 @@ def prepare_train_test_data(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """
     Prepare training and testing data with optional feature subset selection.
-
-    Args:
-        df: Input dataframe
-        feature_subset: Optional list of feature names to use
-        test_size: Proportion of data to use for testing
-        random_state: Random seed for reproducibility
-
-    Returns:
-        Tuple containing X_train, X_test, y_train, y_test
+    Ensures both classes are represented in train and test sets.
     """
-    # Drop non-feature columns
-    non_feature_cols = [
-        "is_valid",
-        "start_time",
-        "end_time",
-        "order_id",
-        "start_time_unix",
-        "end_time_unix",
-    ]
+    # Create a copy of the DataFrame to avoid modifying the original
+    df_copy = df.copy()
 
-    X = df.drop(columns=[col for col in non_feature_cols if col in df.columns])
+    # Check class distribution before doing anything
+    class_counts = df_copy["is_valid"].value_counts()
+    print(f"Original class distribution: {dict(class_counts)}")
+
+    # Check if we have both classes in the data with sufficient samples
+    if len(class_counts) < 2:
+        raise ValueError(f"Dataset contains only one class. Cannot split properly.")
+
+    # Ensure minimum samples for stratification - at least 2 samples per class needed
+    for cls, count in class_counts.items():
+        if count < 2:
+            raise ValueError(
+                f"Class {cls} has only {count} samples, which is too few for stratification."
+            )
+
+    # Extract target variable
+    y = df_copy["is_valid"]
+
+    # Remove non-feature columns
+    non_feature_cols = ["is_valid"]
+    X = df_copy.drop(
+        columns=[col for col in non_feature_cols if col in df_copy.columns]
+    )
 
     # Filter features if a subset is specified
     if feature_subset:
@@ -121,12 +147,31 @@ def prepare_train_test_data(
             )
         X = X[available_features]
 
-    y = df["is_valid"]
+    # Convert datetime columns to numeric features to avoid TypeError
+    for col in X.columns:
+        if pd.api.types.is_datetime64_any_dtype(X[col]):
+            # Extract useful numeric features from datetime
+            X[f"{col}_timestamp"] = (
+                X[col].astype(np.int64) // 10**9
+            )  # Unix timestamp in seconds
+            X = X.drop(columns=[col])  # Remove the original datetime column
 
-    # Split data
+    # Split data with stratification to maintain class balance
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
     )
+
+    # Verify that both classes appear in both train and test sets
+    train_classes = set(y_train.unique())
+    test_classes = set(y_test.unique())
+
+    if len(train_classes) < 2 or len(test_classes) < 2:
+        raise ValueError(
+            f"Split resulted in imbalanced classes. Train classes: {train_classes}, Test classes: {test_classes}"
+        )
+
+    print(f"Train class distribution: {dict(y_train.value_counts())}")
+    print(f"Test class distribution: {dict(y_test.value_counts())}")
 
     return X_train, X_test, y_train, y_test
 
@@ -162,23 +207,34 @@ def evaluate_classifier(
 ) -> Dict[str, float]:
     """
     Evaluate a classifier on test data.
-
-    Args:
-        model: Trained model (either DecisionTreeClassifier or BiLSTM)
-        X_test: Test features
-        y_test: Test labels
-        model_type: Type of model ('dt' for decision tree, 'lstm' for BiLSTM)
-
-    Returns:
-        Dictionary containing accuracy and AUC metrics
     """
+    result_metrics = {}
+
+    # Verify we have at least two classes in test set
+    unique_classes = np.unique(y_test)
+    if len(unique_classes) < 2:
+        raise ValueError(
+            f"Test set contains only classes: {unique_classes}. Need both classes for proper evaluation."
+        )
+
     if model_type.lower() == "dt":
         y_pred = model.predict(X_test)
-        y_proba = model.predict_proba(X_test)[:, 1]
+
+        # Get probabilities - handle potential shape issues
+        y_proba_all = model.predict_proba(X_test)
+
+        # Make sure we're getting the probability for the positive class
+        if y_proba_all.shape[1] >= 2:  # Normal case with both classes
+            y_proba = y_proba_all[:, 1]
+        else:  # Unusual case with only one class in prediction
+            y_proba = y_proba_all[:, 0]
+
     elif model_type.lower() == "lstm":
-        # Create a test dataset and dataloader for BiLSTM
-        test_dataset = BiLSTMDataset(
-            pd.concat([X_test, y_test], axis=1), sequence_length=19
+        # Create a test dataset and dataloader for BiLSTM using the hypothesis testing dataset class
+        test_data = pd.concat([X_test, y_test], axis=1)
+        feature_columns = list(X_test.columns)
+        test_dataset = BiLSTMDatasetHypothesis(
+            test_data, sequence_length=19, feature_columns=feature_columns
         )
         test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
 
@@ -187,13 +243,22 @@ def evaluate_classifier(
         y_pred = np.array(all_preds)
         y_proba = np.array(all_probs)
         y_test = np.array(all_labels)
+
+        # Check again after processing through the LSTM
+        unique_classes = np.unique(y_test)
+        if len(unique_classes) < 2:
+            raise ValueError(
+                f"LSTM predictions resulted in only classes: {unique_classes}. Cannot compute metrics properly."
+            )
+
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
-    accuracy = accuracy_score(y_test, y_pred)
-    auc = roc_auc_score(y_test, y_proba)
+    # Calculate metrics
+    result_metrics["accuracy"] = accuracy_score(y_test, y_pred)
+    result_metrics["roc_auc"] = roc_auc_score(y_test, y_proba)
 
-    return {"accuracy": accuracy, "roc_auc": auc}
+    return result_metrics
 
 
 def permutation_test(
@@ -211,28 +276,27 @@ def permutation_test(
     """
     Perform permutation test to determine if a classifier can distinguish between
     real and simulated data with statistical significance.
-
-    Args:
-        model_train_func: Function to train the model
-        X_train: Training features
-        X_test: Test features
-        y_train: Training labels
-        y_test: Test labels
-        metric: Metric to use ('accuracy' or 'roc_auc')
-        n_permutations: Number of permutations
-        model_type: Type of model ('dt' for decision tree, 'lstm' for BiLSTM)
-        verbose: Whether to display progress bar
-        **model_kwargs: Additional arguments to pass to the model training function
-
-    Returns:
-        Tuple containing observed statistic, p-value, and null distribution
     """
+    # Ensure both classes are in train and test sets
+    if len(set(y_train.unique())) < 2:
+        raise ValueError(
+            f"Training set doesn't contain both classes. Cannot train model properly."
+        )
+
+    if len(set(y_test.unique())) < 2:
+        raise ValueError(
+            f"Test set doesn't contain both classes. Cannot evaluate properly."
+        )
+
     # Train model on original data
     model = model_train_func(X_train, y_train, **model_kwargs)
 
     # Evaluate on original data
-    metrics = evaluate_classifier(model, X_test, y_test, model_type=model_type)
-    observed_stat = metrics[metric]
+    try:
+        metrics = evaluate_classifier(model, X_test, y_test, model_type=model_type)
+        observed_stat = metrics[metric]
+    except Exception as e:
+        raise ValueError(f"Error evaluating model: {str(e)}")
 
     # Permutation test
     permutation_stats = []
@@ -253,9 +317,8 @@ def permutation_test(
             y_pred = model.predict(X_test)
             y_proba = model.predict_proba(X_test)[:, 1]
         else:  # LSTM model
-            test_dataset = BiLSTMDataset(
-                pd.concat([X_test, y_test_perm], axis=1), sequence_length=19
-            )
+            test_data = pd.concat([X_test, y_test_perm], axis=1)
+            test_dataset = BiLSTMDatasetHypothesis(test_data, sequence_length=19)
             test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
 
             # Get predictions
@@ -286,7 +349,7 @@ def multiple_runs_hypothesis_test(
     n_runs: int = 10,
     n_permutations: int = 1000,
     test_size: float = 0.2,
-    alpha: float = 0.05,
+    alpha: float = 0.01,
     model_type: str = "dt",
     metric: str = "accuracy",
     output_dir: str = "hypothesis_results",
@@ -311,176 +374,175 @@ def multiple_runs_hypothesis_test(
     Returns:
         Dictionary containing results for each feature subset and run
     """
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    # Create model-specific output directory
+    model_output_dir = os.path.join(output_dir, model_type.lower())
+    os.makedirs(model_output_dir, exist_ok=True)
 
     results = {}
 
     # Select model training function based on model_type
     if model_type.lower() == "dt":
         model_train_func = train_decision_tree
+    elif model_type.lower() == "lstm":
+        # Create a function that wraps the BiLSTM training for compatibility
+        def train_bilstm(X_train, y_train, **kwargs):
+            # Ensure data is properly formatted for BiLSTM
+            train_data = pd.concat([X_train, y_train], axis=1)
+
+            # Create dataset and dataloader
+            sequence_length = kwargs.get(
+                "sequence_length", 19
+            )  # Default sequence length
+            batch_size = kwargs.get("batch_size", 32)  # Default batch size
+
+            train_dataset = BiLSTMDatasetHypothesis(
+                train_data, sequence_length=sequence_length
+            )
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                collate_fn=collate_fn,
+            )
+
+            # Define BiLSTM model - Updated to match notebook's xLSTM architecture
+            input_size = X_train.shape[1]
+            hidden_size = kwargs.get("hidden_size", 512)  # Increased from 64 to 512
+            num_layers = kwargs.get("num_layers", 1)  # Changed from 2 to 1
+            attention_heads = kwargs.get("attention_heads", 4)
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model = BiLSTM(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                attention_heads=attention_heads,
+            ).to(device)
+
+            # Train BiLSTM model
+            n_epochs = kwargs.get("n_epochs", 10)  # Default number of epochs
+            train_model(
+                model,
+                train_loader,
+                num_epochs=n_epochs,
+                learning_rate=1e-3,
+                device=device,
+            )
+
+            return model
+
+        model_train_func = train_bilstm
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
+    # Run hypothesis tests for each feature subset
     for component, features in feature_subsets.items():
-        print(f"\nTesting component: {component} with {len(features)} features")
+        print(f"\nTesting component: {component}")
 
-        component_results = {
+        # Initialize results for this component
+        results[component] = {
             "observed_stats": [],
             "p_values": [],
-            "reject_h0": [],
-            "feature_count": len(features),
-            "features": features,
+            "rejections": [],
         }
 
+        # Run multiple tests with different random seeds
         for run in range(n_runs):
-            print(f"  Run {run+1}/{n_runs}")
-            random_state = 42 + run
+            print(f"Run {run+1}/{n_runs}")
+            random_seed = random.randint(1, 10000)  # Generate a random seed
 
-            # Prepare data with the current feature subset
-            X_train, X_test, y_train, y_test = prepare_train_test_data(
-                df,
-                feature_subset=features,
-                test_size=test_size,
-                random_state=random_state,
+            try:
+                # Prepare train/test data with the current feature subset
+                X_train, X_test, y_train, y_test = prepare_train_test_data(
+                    df, features, test_size=test_size, random_state=random_seed
+                )
+
+                # Run permutation test
+                observed_stat, p_value, _ = permutation_test(
+                    model_train_func,
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    metric=metric,
+                    n_permutations=n_permutations,
+                    model_type=model_type,
+                    **model_kwargs,
+                )
+
+                # Store results
+                results[component]["observed_stats"].append(observed_stat)
+                results[component]["p_values"].append(p_value)
+                results[component]["rejections"].append(1 if p_value < alpha else 0)
+
+                print(
+                    f"  {metric}: {observed_stat:.4f}, p-value: {p_value:.4f}, reject: {p_value < alpha}"
+                )
+
+            except Exception as e:
+                print(f"Error in run {run+1}: {str(e)}")
+                # Add placeholder values to maintain run count
+                results[component]["observed_stats"].append(float("nan"))
+                results[component]["p_values"].append(float("nan"))
+                results[component]["rejections"].append(0)
+
+        # Calculate summary statistics
+        valid_observations = [
+            stat for stat in results[component]["observed_stats"] if not np.isnan(stat)
+        ]
+        valid_p_values = [p for p in results[component]["p_values"] if not np.isnan(p)]
+        valid_rejections = [
+            r
+            for i, r in enumerate(results[component]["rejections"])
+            if not np.isnan(results[component]["observed_stats"][i])
+        ]
+
+        # Only calculate stats if we have valid results
+        if valid_observations:
+            results[component]["mean_observed_stat"] = np.mean(valid_observations)
+            results[component]["std_observed_stat"] = np.std(valid_observations)
+            results[component]["mean_p_value"] = np.mean(valid_p_values)
+            results[component]["rejection_rate"] = (
+                np.mean(valid_rejections) if valid_rejections else 0
             )
 
-            # Perform permutation test
-            observed_stat, p_value, null_dist = permutation_test(
-                model_train_func,
-                X_train,
-                X_test,
-                y_train,
-                y_test,
-                metric=metric,
-                n_permutations=n_permutations,
-                model_type=model_type,
-                verbose=True,
-                random_state=random_state,
-                **model_kwargs,
+            print(f"Summary for {component}:")
+            print(f"  Mean {metric}: {results[component]['mean_observed_stat']:.4f}")
+            print(f"  Mean p-value: {results[component]['mean_p_value']:.4f}")
+            print(f"  Rejection rate: {results[component]['rejection_rate']:.2f}")
+        else:
+            results[component]["mean_observed_stat"] = float("nan")
+            results[component]["std_observed_stat"] = float("nan")
+            results[component]["mean_p_value"] = float("nan")
+            results[component]["rejection_rate"] = 0
+            print(f"No valid results for {component}")
+
+    # Save results to file using the model-specific directory
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    result_file = os.path.join(model_output_dir, f"hypothesis_results_{timestamp}.txt")
+
+    with open(result_file, "w") as f:
+        f.write(f"Hypothesis Testing Results\n")
+        f.write(f"========================\n")
+        f.write(f"Model: {model_type}\n")
+        f.write(f"Metric: {metric}\n")
+        f.write(f"Runs: {n_runs}\n")
+        f.write(f"Permutations: {n_permutations}\n")
+        f.write(f"Alpha: {alpha}\n\n")
+
+        for component, res in results.items():
+            f.write(f"Component: {component}\n")
+            f.write(
+                f"  Mean {metric}: {res.get('mean_observed_stat', float('nan')):.4f}\n"
             )
-
-            component_results["observed_stats"].append(observed_stat)
-            component_results["p_values"].append(p_value)
-            component_results["reject_h0"].append(p_value < alpha)
-
-            # Save the null distribution for this run
-            null_dist_df = pd.DataFrame({"permutation_stat": null_dist})
-            null_dist_df.to_csv(
-                f"{output_dir}/{component}_run{run+1}_null_dist.csv", index=False
+            f.write(
+                f"  Std {metric}: {res.get('std_observed_stat', float('nan')):.4f}\n"
             )
+            f.write(f"  Mean p-value: {res.get('mean_p_value', float('nan')):.4f}\n")
+            f.write(f"  Rejection rate: {res.get('rejection_rate', 0):.2f}\n")
+            f.write("\n")
 
-            # Plot histogram of null distribution with observed statistic
-            plt.figure(figsize=(10, 6))
-            plt.hist(
-                null_dist,
-                bins=30,
-                alpha=0.7,
-                label=f"Null Distribution (p={p_value:.4f})",
-            )
-            plt.axvline(
-                x=observed_stat,
-                color="red",
-                linestyle="dashed",
-                linewidth=2,
-                label=f"Observed {metric}={observed_stat:.4f}",
-            )
-            plt.title(f"Component: {component}, Run {run+1}, Permutation Test")
-            plt.xlabel(f"{metric.upper()}")
-            plt.ylabel("Frequency")
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(f"{output_dir}/{component}_run{run+1}_permutation_test.png")
-            plt.close()
-
-        # Calculate aggregate statistics
-        component_results["mean_observed_stat"] = np.mean(
-            component_results["observed_stats"]
-        )
-        component_results["std_observed_stat"] = np.std(
-            component_results["observed_stats"]
-        )
-        component_results["mean_p_value"] = np.mean(component_results["p_values"])
-        component_results["rejection_rate"] = (
-            sum(component_results["reject_h0"]) / n_runs
-        )
-
-        results[component] = component_results
-
-        # Save component results
-        pd.DataFrame(
-            {
-                "run": list(range(1, n_runs + 1)),
-                "observed_stat": component_results["observed_stats"],
-                "p_value": component_results["p_values"],
-                "reject_h0": component_results["reject_h0"],
-            }
-        ).to_csv(f"{output_dir}/{component}_results.csv", index=False)
-
-    # Generate summary report
-    summary = []
-    for component, res in results.items():
-        summary.append(
-            {
-                "Component": component,
-                "Feature_Count": res["feature_count"],
-                "Mean_Observed_Stat": res["mean_observed_stat"],
-                "Std_Observed_Stat": res["std_observed_stat"],
-                "Mean_P_Value": res["mean_p_value"],
-                "H0_Rejection_Rate": res["rejection_rate"],
-                "Conclusion": (
-                    "SBDT Component Inaccurate"
-                    if res["rejection_rate"] > 0.5
-                    else "SBDT Component Accurate"
-                ),
-            }
-        )
-
-    pd.DataFrame(summary).to_csv(f"{output_dir}/summary_results.csv", index=False)
-
-    # Create a summary plot
-    plt.figure(figsize=(12, 8))
-    components = [s["Component"] for s in summary]
-    rejection_rates = [s["H0_Rejection_Rate"] for s in summary]
-    mean_stats = [s["Mean_Observed_Stat"] for s in summary]
-
-    x = np.arange(len(components))
-    width = 0.35
-
-    fig, ax1 = plt.subplots(figsize=(14, 8))
-
-    bars1 = ax1.bar(
-        x - width / 2,
-        rejection_rates,
-        width,
-        label="H0 Rejection Rate",
-        color="darkblue",
-    )
-    ax1.set_ylabel("H0 Rejection Rate", fontsize=12)
-    ax1.set_ylim(0, 1.05)
-
-    ax2 = ax1.twinx()
-    bars2 = ax2.bar(
-        x + width / 2, mean_stats, width, label=f"Mean {metric.upper()}", color="orange"
-    )
-    ax2.set_ylabel(f"Mean {metric.upper()}", fontsize=12)
-    ax2.set_ylim(0.4, 1.05)  # Adjusted for metric values
-
-    ax1.set_xlabel("SBDT Component", fontsize=12)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(components, rotation=45, ha="right")
-
-    # Add horizontal line for alpha level
-    ax1.axhline(y=0.5, color="red", linestyle="--", label="Decision Threshold (0.5)")
-
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
-
-    plt.title("Hypothesis Test Results by SBDT Component", fontsize=14)
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/summary_plot.png")
-    plt.close()
+    print(f"\nResults saved to: {result_file}")
 
     return results
 
@@ -494,31 +556,31 @@ def define_feature_subsets() -> Dict[str, List[str]]:
     """
     # TODO: Create feature subsets for the SBDT components
     return {
-        "process_timing": [
+        "time_model": [
             "duration",
-            "time_since_last_process",
-            "hour_of_day",
-            "day_of_week",
-            "process_count_in_order",
-        ],
-        "resource_allocation": [
-            "resource_id",
-            "resource_utilization",
-            "resource_efficiency",
-            "resource_availability",
-        ],
-        "process_sequence": [
             "sequence_number",
-            "is_first_process",
-            "is_last_process",
-            "prev_process_duration",
-            "next_process_duration",
+            "hour_of_day_cos",
+            "hour_of_day_sin",
+            "day_of_week_cos",
+            "day_of_week_sin",
+            "is_break",
+            "is_not_weekday",
         ],
-        "quality_metrics": [
-            "quality_score",
-            "defect_rate",
-            "process_accuracy",
-            "first_pass_yield",
+        "resource_model": [
+            "resource_id",
+            "part_id",
+            "process_id",
+        ],
+        "process_model": [
+            "process_id",
+            "duration",
+            "sequence_number",
+        ],
+        "kpi_based": [
+            "throughput",
+            "cycle_time_sec",
+            "lead_time_sec",
+            "setup_time_sec",
         ],
         "all_features": [],  # Will be populated with all available features
     }
@@ -536,11 +598,6 @@ if __name__ == "__main__":
     # Populate "all_features" with all available features
     non_feature_cols = [
         "is_valid",
-        "start_time",
-        "end_time",
-        "order_id",
-        "start_time_unix",
-        "end_time_unix",
     ]
     all_features = [col for col in final_data.columns if col not in non_feature_cols]
     feature_subsets["all_features"] = all_features
@@ -548,6 +605,9 @@ if __name__ == "__main__":
     print(f"Number of feature subsets: {len(feature_subsets)}")
     for component, features in feature_subsets.items():
         print(f"  {component}: {len(features)} features")
+
+    # Set the evaluation metric
+    metric = "roc_auc"  # Using roc_auc as the metric instead of accuracy
 
     # Run the hypothesis tests
     results = multiple_runs_hypothesis_test(
@@ -557,8 +617,8 @@ if __name__ == "__main__":
         n_permutations=1000,  # Number of permutations for each test
         test_size=0.2,
         alpha=0.05,
-        model_type="dt",  # Using decision tree classifier
-        metric="accuracy",  # Using accuracy as the metric
+        model_type="lstm",  # dt or lstm
+        metric=metric,  # Pass the defined metric
         output_dir="hypothesis_results",
         max_depth=5,  # Additional parameter for the decision tree
     )
@@ -566,7 +626,7 @@ if __name__ == "__main__":
     # Print final conclusions
     print("\nFinal conclusions:")
     for component, res in results.items():
-        conclusion = "INACCURATE" if res["rejection_rate"] > 0.5 else "ACCURATE"
+        conclusion = "INACCURATE" if res["rejection_rate"] > 0.9 else "ACCURATE"
         print(
-            f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric}: {res['mean_observed_stat']:.4f})"
+            f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )

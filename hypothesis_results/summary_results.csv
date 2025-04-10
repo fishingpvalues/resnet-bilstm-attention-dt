@@ -1,0 +1,6 @@
+Component,Feature_Count,Mean_Observed_Stat,Std_Observed_Stat,Mean_P_Value,H0_Rejection_Rate,Conclusion
+time_model,8,1.0,0.0,0.0,1.0,SBDT Component Inaccurate
+resource_model,3,0.9831462814276504,0.013659717922947736,0.0,1.0,SBDT Component Inaccurate
+process_model,3,1.0,0.0,0.0,1.0,SBDT Component Inaccurate
+kpi_based,4,1.0,0.0,0.0,1.0,SBDT Component Inaccurate
+all_features,23,1.0,0.0,0.0,1.0,SBDT Component Inaccurate
