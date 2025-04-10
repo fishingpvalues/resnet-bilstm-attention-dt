@@ -6,7 +6,7 @@ model_graph = torchview.draw_graph(
     model,
     input_data=torch.randn(1, 19, 10),
     roll=True,
-    graph_name="xLSTM for VVUQ",
+    graph_name="BiLSTM for VVUQ",
     graph_dir="TB",
     save_graph=True,
     expand_nested=True,
@@ -15,4 +15,4 @@ model_graph = torchview.draw_graph(
 model_graph.visual_graph.graph_attr.update(fontname="Times New Roman", fontsize="14")
 model_graph.visual_graph.node_attr.update(fontname="Times New Roman", fontsize="14")
 model_graph.visual_graph.edge_attr.update(fontname="Times New Roman", fontsize="14")
-model_graph.visual_graphgit config user.email "new_email@example.com"
+model_graph.visual_graph

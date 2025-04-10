@@ -32,11 +32,11 @@ final_data["hour_of_day_cos"] = np.cos(2 * np.pi * final_data["hour_of_day"] / 2
 
 
 # --- Model Definition ---
-class xLSTM(nn.Module):
+class BiLSTM(nn.Module):
     def __init__(
         self, input_size: int, hidden_size: int, num_layers: int, attention_heads: int
     ):
-        super(xLSTM, self).__init__()
+        super(BiLSTM, self).__init__()
 
         self.lstm_layers = nn.ModuleList(
             [
@@ -88,7 +88,7 @@ class xLSTM(nn.Module):
 
 
 # --- Dataset Definition ---
-class XLSTMDataset(Dataset):
+class BiLSTMDataset(Dataset):
     def __init__(self, df: pd.DataFrame, sequence_length: int):
         self.sequence_length = sequence_length
         self.data = df.copy()
@@ -96,7 +96,7 @@ class XLSTMDataset(Dataset):
             self.data.iloc[i : i + sequence_length]
             for i in range(len(self.data) - sequence_length + 1)
         ]
-        print("Initialized XLSTMDataset with samples:", len(self.samples))
+        print("Initialized BiLSTMDataset with samples:", len(self.samples))
 
         # Define feature and target columns (ensure these exist in your DataFrame)
         self.feature_columns = [
@@ -131,7 +131,7 @@ class XLSTMDataset(Dataset):
 
 # --- Training and Evaluation Functions (unchanged) ---
 def train_model(
-    model: xLSTM,
+    model: BiLSTM,
     dataloader: DataLoader,
     num_epochs: int = 10,
     learning_rate: float = 0.001,
@@ -171,7 +171,7 @@ def train_model(
 
 
 def evaluate_model(
-    model: xLSTM,
+    model: BiLSTM,
     dataloader: DataLoader,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ) -> Dict[str, float]:
@@ -242,8 +242,8 @@ def evaluate_model_with_preds(
 df_train_mod = pd.concat([X_train, y_train], axis=1)
 df_test_mod = pd.concat([X_test, y_test], axis=1)
 
-train_dataset = XLSTMDataset(df_train_mod, sequence_length=19)
-test_dataset = XLSTMDataset(df_test_mod, sequence_length=19)
+train_dataset = BiLSTMDataset(df_train_mod, sequence_length=19)
+test_dataset = BiLSTMDataset(df_test_mod, sequence_length=19)
 
 train_loader = DataLoader(
     train_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn
@@ -254,7 +254,7 @@ print("CUDA IS AVAILABLE?", torch.cuda.is_available())
 print("Train dataset size:", len(train_dataset))
 print("df_train_mod shape:", df_train_mod.shape)
 
-model = xLSTM(
+model = BiLSTM(
     input_size=12, hidden_size=512, num_layers=1, attention_heads=4
 )  # Change input size to match your features
 loss_history = train_model(model, train_loader, num_epochs=50)
@@ -267,5 +267,5 @@ diagnose_model(loss_history, metrics["accuracy"])
 all_labels, all_preds, all_probs = evaluate_model_with_preds(model, test_loader)
 generate_report(all_labels, all_preds, all_probs)
 
-torch.save(model.state_dict(), "xLSTM_model.pth")
+torch.save(model.state_dict(), "BiLSTM_model.pth")
 print("Model saved.")
