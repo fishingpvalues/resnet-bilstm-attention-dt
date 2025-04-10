@@ -105,6 +105,10 @@ def load_and_preprocess_data() -> pd.DataFrame:
     return final_data
 
 
+# Add global feature cache
+feature_cache = {}
+
+
 def prepare_train_test_data(
     df: pd.DataFrame,
     feature_subset: List[str] = None,
@@ -115,6 +119,13 @@ def prepare_train_test_data(
     Prepare training and testing data with optional feature subset selection.
     Ensures both classes are represented in train and test sets.
     """
+    # Create cache key based on features and random state
+    cache_key = (frozenset(feature_subset) if feature_subset else None, random_state)
+
+    # Check if we've already processed this combination
+    if cache_key in feature_cache:
+        return feature_cache[cache_key]
+
     # Create a copy of the DataFrame to avoid modifying the original
     df_copy = df.copy()
 
@@ -177,6 +188,8 @@ def prepare_train_test_data(
     print(f"Train class distribution: {dict(y_train.value_counts())}")
     print(f"Test class distribution: {dict(y_test.value_counts())}")
 
+    # Cache the result before returning
+    feature_cache[cache_key] = (X_train, X_test, y_train, y_test)
     return X_train, X_test, y_train, y_test
 
 
@@ -381,6 +394,18 @@ def permutation_test(
                     observed_stat = accuracy_score(y_test_array, y_pred)
                 else:
                     raise
+
+        # Free up memory
+        torch.cuda.empty_cache()
+
+        # Use smaller batch size for evaluation to avoid OOM
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=16,  # Smaller batch size
+            collate_fn=collate_fn,
+            pin_memory=True,
+            num_workers=2,
+        )
 
         # For permutations, use the fixed predictions with shuffled labels
         permutation_stats = []
