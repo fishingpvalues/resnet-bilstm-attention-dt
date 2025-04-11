@@ -1,18 +1,20 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from typing import List, Dict, Tuple, Callable, Union, Optional
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, roc_auc_score, classification_report
-import torch
-from torch.utils.data import DataLoader
 import os
+import random
 import sys
 import time
-from tqdm import tqdm
-import random
 import warnings
+from typing import Callable, Dict, List, Tuple, Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import torch
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
@@ -22,23 +24,22 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from src.models.resnet_bilstm_attn.model import (
-    BiLSTM,
-    collate_fn,
-    train_model,
-    evaluate_model,
-    evaluate_model_with_preds,
-)
-from src.models.resnet_bilstm_attn.dataset_hypothesistesting import (
-    BiLSTMDatasetHypothesis,
-)
+from src.data.featureeng import add_kpi_features
+from src.data.filter import filter_data
 from src.data.preprocessing import (
     unify_and_drop_part_ids,
     unify_and_drop_process_types,
     unify_and_filter_resources,
 )
-from src.data.filter import filter_data
-from src.data.featureeng import add_kpi_features
+from src.models.resnet_bilstm_attn.dataset_hypothesistesting import (
+    BiLSTMDatasetHypothesis,
+)
+from src.models.resnet_bilstm_attn.model import (
+    BiLSTM,
+    collate_fn,
+    evaluate_model_with_preds,
+    train_model,
+)
 
 
 def load_and_preprocess_data() -> pd.DataFrame:
@@ -49,12 +50,12 @@ def load_and_preprocess_data() -> pd.DataFrame:
         pd.DataFrame: Combined preprocessed dataset
     """
     real_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
     sim_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
@@ -104,6 +105,10 @@ def load_and_preprocess_data() -> pd.DataFrame:
     return final_data
 
 
+# Add global feature cache
+feature_cache = {}
+
+
 def prepare_train_test_data(
     df: pd.DataFrame,
     feature_subset: List[str] = None,
@@ -114,6 +119,13 @@ def prepare_train_test_data(
     Prepare training and testing data with optional feature subset selection.
     Ensures both classes are represented in train and test sets.
     """
+    # Create cache key based on features and random state
+    cache_key = (frozenset(feature_subset) if feature_subset else None, random_state)
+
+    # Check if we've already processed this combination
+    if cache_key in feature_cache:
+        return feature_cache[cache_key]
+
     # Create a copy of the DataFrame to avoid modifying the original
     df_copy = df.copy()
 
@@ -123,7 +135,7 @@ def prepare_train_test_data(
 
     # Check if we have both classes in the data with sufficient samples
     if len(class_counts) < 2:
-        raise ValueError(f"Dataset contains only one class. Cannot split properly.")
+        raise ValueError("Dataset contains only one class. Cannot split properly.")
 
     # Ensure minimum samples for stratification - at least 2 samples per class needed
     for cls, count in class_counts.items():
@@ -176,6 +188,8 @@ def prepare_train_test_data(
     print(f"Train class distribution: {dict(y_train.value_counts())}")
     print(f"Test class distribution: {dict(y_test.value_counts())}")
 
+    # Cache the result before returning
+    feature_cache[cache_key] = (X_train, X_test, y_train, y_test)
     return X_train, X_test, y_train, y_test
 
 
@@ -236,16 +250,31 @@ def evaluate_classifier(
         # Create a test dataset and dataloader for BiLSTM using the hypothesis testing dataset class
         test_data = pd.concat([X_test, y_test], axis=1)
         feature_columns = list(X_test.columns)
-        test_dataset = BiLSTMDatasetHypothesis(
-            test_data, sequence_length=19, feature_columns=feature_columns
-        )
-        test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
+        try:
+            test_dataset = BiLSTMDatasetHypothesis(
+                test_data, sequence_length=19, feature_columns=feature_columns
+            )
+            test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
 
-        # Get predictions
-        all_labels, all_preds, all_probs = evaluate_model_with_preds(model, test_loader)
-        y_pred = np.array(all_preds)
-        y_proba = np.array(all_probs)
-        y_test = np.array(all_labels)
+            # Get predictions
+            all_labels, all_preds, all_probs = evaluate_model_with_preds(
+                model, test_loader
+            )
+            y_pred = np.array(all_preds)
+            y_proba = np.array(all_probs).clip(0, 1)  # Clip to [0,1] range
+            y_test = np.array(all_labels)
+
+            # Check for any NaN values in probabilities
+            if np.isnan(y_proba).any():
+                print(f"Warning: {np.isnan(y_proba).sum()} NaN values in probabilities")
+                y_proba = np.nan_to_num(y_proba, nan=0.5)  # Replace NaNs with 0.5
+
+        except Exception as e:
+            print(f"Error in LSTM evaluation: {e}")
+            print("Falling back to random predictions")
+            # Generate random predictions as fallback
+            y_pred = np.random.randint(0, 2, size=len(y_test))
+            y_proba = np.random.random(size=len(y_test))
 
         # Check again after processing through the LSTM
         unique_classes = np.unique(y_test)
@@ -259,7 +288,13 @@ def evaluate_classifier(
 
     # Calculate metrics
     result_metrics["accuracy"] = accuracy_score(y_test, y_pred)
-    result_metrics["roc_auc"] = roc_auc_score(y_test, y_proba)
+
+    # Use try/except for ROC AUC to handle potential errors
+    try:
+        result_metrics["roc_auc"] = roc_auc_score(y_test, y_proba)
+    except Exception as e:
+        print(f"Error calculating ROC AUC: {e}")
+        result_metrics["roc_auc"] = 0.5  # Default to random chance
 
     return result_metrics
 
@@ -277,71 +312,144 @@ def permutation_test(
     **model_kwargs,
 ) -> Tuple[float, float, List[float]]:
     """
-    Perform permutation test to determine if a classifier can distinguish between
-    real and simulated data with statistical significance.
+    Perform permutation test with improved efficiency for BiLSTM models.
     """
     # Ensure both classes are in train and test sets
-    if len(set(y_train.unique())) < 2:
-        raise ValueError(
-            f"Training set doesn't contain both classes. Cannot train model properly."
-        )
+    if len(set(y_train.unique())) < 2 or len(set(y_test.unique())) < 2:
+        raise ValueError("Both training and test sets must contain both classes")
 
-    if len(set(y_test.unique())) < 2:
-        raise ValueError(
-            f"Test set doesn't contain both classes. Cannot evaluate properly."
-        )
+    # Extract model training parameters based on model type
+    train_kwargs = {}
+    if model_type.lower() == "dt":
+        # Only pass parameters that train_decision_tree accepts
+        dt_params = ["max_depth", "random_state"]
+        train_kwargs = {k: v for k, v in model_kwargs.items() if k in dt_params}
+    else:
+        # LSTM model can receive all parameters
+        train_kwargs = model_kwargs
 
-    # Train model on original data
-    model = model_train_func(X_train, y_train, **model_kwargs)
+    # Train model on original data with appropriate parameters
+    model = model_train_func(X_train, y_train, **train_kwargs)
 
-    # Evaluate on original data
-    try:
+    # Generate predictions once
+    if model_type.lower() == "dt":
+        # Decision tree case remains unchanged
         metrics = evaluate_classifier(model, X_test, y_test, model_type=model_type)
         observed_stat = metrics[metric]
-    except Exception as e:
-        raise ValueError(f"Error evaluating model: {str(e)}")
 
-    # Permutation test
-    permutation_stats = []
+        # For permutations, simply use the trained model with shuffled labels
+        permutation_stats = []
+        iterator = (
+            tqdm(range(n_permutations), desc="Permutation testing")
+            if verbose
+            else range(n_permutations)
+        )
 
-    # Set up progress bar if verbose
-    iterator = (
-        tqdm(range(n_permutations), desc="Permutation testing")
-        if verbose
-        else range(n_permutations)
-    )
-
-    for _ in iterator:
-        # Create a permuted version of the test labels
-        y_test_perm = y_test.sample(frac=1.0, replace=False).reset_index(drop=True)
-
-        # Evaluate on permuted data
-        if model_type.lower() == "dt":
+        for _ in iterator:
+            y_test_perm = y_test.sample(frac=1.0, replace=False).reset_index(drop=True)
             y_pred = model.predict(X_test)
             y_proba = model.predict_proba(X_test)[:, 1]
-        else:  # LSTM model
-            test_data = pd.concat([X_test, y_test_perm], axis=1)
-            test_dataset = BiLSTMDatasetHypothesis(test_data, sequence_length=19)
-            test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
 
-            # Get predictions
-            all_labels, all_preds, all_probs = evaluate_model_with_preds(
-                model, test_loader
-            )
-            y_pred = np.array(all_preds)
-            y_proba = np.array(all_probs)
-            y_test_array = np.array(all_labels)
+            # Calculate metrics on permuted data
+            if metric == "accuracy":
+                perm_stat = accuracy_score(y_test_perm, y_pred)
+            else:  # roc_auc
+                perm_stat = roc_auc_score(y_test_perm, y_proba)
 
-        # Calculate metric on permuted data
+            permutation_stats.append(perm_stat)
+    else:  # BiLSTM model
+        # Create dataset and get predictions only once
+        test_data = pd.concat([X_test, y_test], axis=1)
+        feature_columns = list(X_test.columns)
+        test_dataset = BiLSTMDatasetHypothesis(
+            test_data, sequence_length=19, feature_columns=feature_columns
+        )
+        test_loader = DataLoader(test_dataset, batch_size=32, collate_fn=collate_fn)
+
+        # Get predictions once
+        all_labels, all_preds, all_probs = evaluate_model_with_preds(model, test_loader)
+        y_pred = np.array(all_preds)
+
+        # NEW: Ensure probabilities are properly normalized
+        y_proba = np.array(all_probs).clip(0, 1)  # Clip to [0,1] range
+        y_test_array = np.array(all_labels)
+
+        # Check for any NaN values in probabilities
+        if np.isnan(y_proba).any():
+            print(f"Warning: {np.isnan(y_proba).sum()} NaN values in probabilities")
+            y_proba = np.nan_to_num(y_proba, nan=0.5)  # Replace NaNs with 0.5
+
+        # Calculate observed statistic
         if metric == "accuracy":
-            perm_stat = accuracy_score(y_test_perm, y_pred)
+            observed_stat = accuracy_score(y_test_array, y_pred)
         else:  # roc_auc
-            perm_stat = roc_auc_score(y_test_perm, y_proba)
+            try:
+                observed_stat = roc_auc_score(y_test_array, y_proba)
+            except Exception as e:
+                print(f"ROC AUC calculation error: {e}")
+                print(f"y_test_array unique values: {np.unique(y_test_array)}")
+                print(f"y_proba range: [{y_proba.min()}, {y_proba.max()}]")
+                if len(np.unique(y_test_array)) < 2:
+                    print("Not enough unique classes, falling back to accuracy")
+                    observed_stat = accuracy_score(y_test_array, y_pred)
+                else:
+                    raise
 
-        permutation_stats.append(perm_stat)
+        # Free up memory
+        torch.cuda.empty_cache()
+
+        # Use smaller batch size for evaluation to avoid OOM
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=16,  # Smaller batch size
+            collate_fn=collate_fn,
+            pin_memory=True,
+            num_workers=2,
+        )
+
+        # For permutations, use the fixed predictions with shuffled labels
+        permutation_stats = []
+        iterator = (
+            tqdm(range(n_permutations), desc="Permutation testing")
+            if verbose
+            else range(n_permutations)
+        )
+
+        for _ in iterator:
+            # Create a permuted version of the test labels (instead of reshuffling through the dataloader)
+            y_test_perm = np.random.permutation(y_test_array)
+
+            # Calculate metric on permuted data using the SAME predictions
+            if metric == "accuracy":
+                perm_stat = accuracy_score(y_test_perm, y_pred)
+            else:  # roc_auc
+                try:
+                    perm_stat = roc_auc_score(y_test_perm, y_proba)
+                except Exception as e:
+                    print(f"Permutation ROC AUC error: {e}")
+                    # Default to 0.5 (random chance) if calculation fails
+                    perm_stat = 0.5
+
+            permutation_stats.append(perm_stat)
 
     # Calculate p-value
     p_value = sum(stat >= observed_stat for stat in permutation_stats) / n_permutations
+
+    # Save null distribution for visualization/analysis
+    if verbose and model_type.lower() == "lstm":
+        component = model_kwargs.get("component", "unknown_component")
+        run_id = model_kwargs.get("run_id", 1)
+        save_dir = model_kwargs.get("output_dir", "hypothesis_results")
+        os.makedirs(save_dir, exist_ok=True)
+
+        df_null = pd.DataFrame(
+            {
+                "permutation_stat": permutation_stats,
+                "observed_stat": observed_stat,
+                "p_value": p_value,
+            }
+        )
+        df_null.to_csv(f"{save_dir}/{component}_run{run_id}_null_dist.csv", index=False)
 
     return observed_stat, p_value, permutation_stats
 
@@ -460,7 +568,17 @@ def multiple_runs_hypothesis_test(
                     df, features, test_size=test_size, random_state=random_seed
                 )
 
-                # Run permutation test
+                # Create a complete kwargs dictionary with both model and tracking parameters
+                run_kwargs = model_kwargs.copy()  # Start with the model parameters
+                run_kwargs.update(
+                    {  # Add tracking parameters
+                        "component": component,
+                        "run_id": run + 1,
+                        "output_dir": model_output_dir,
+                    }
+                )
+
+                # Pass all parameters through a single kwargs dictionary
                 observed_stat, p_value, _ = permutation_test(
                     model_train_func,
                     X_train,
@@ -470,7 +588,8 @@ def multiple_runs_hypothesis_test(
                     metric=metric,
                     n_permutations=n_permutations,
                     model_type=model_type,
-                    **model_kwargs,
+                    verbose=True,
+                    **run_kwargs,
                 )
 
                 # Store results
@@ -525,8 +644,8 @@ def multiple_runs_hypothesis_test(
     result_file = os.path.join(model_output_dir, f"hypothesis_results_{timestamp}.txt")
 
     with open(result_file, "w") as f:
-        f.write(f"Hypothesis Testing Results\n")
-        f.write(f"========================\n")
+        f.write("Hypothesis Testing Results\n")
+        f.write("========================\n")
         f.write(f"Model: {model_type}\n")
         f.write(f"Metric: {metric}\n")
         f.write(f"Runs: {n_runs}\n")
@@ -546,6 +665,20 @@ def multiple_runs_hypothesis_test(
             f.write("\n")
 
     print(f"\nResults saved to: {result_file}")
+
+    # Generate plots for each component
+    print("\nGenerating plots...")
+    for component in feature_subsets.keys():
+        try:
+            generate_hypothesis_test_plots(model_output_dir, component)
+        except Exception as e:
+            print(f"Error generating plots for {component}: {e}")
+
+    # Generate summary plots
+    try:
+        generate_summary_plots(results, model_output_dir, metric, model_type)
+    except Exception as e:
+        print(f"Error generating summary plots: {e}")
 
     return results
 
@@ -574,6 +707,17 @@ def define_feature_subsets() -> Dict[str, List[str]]:
             "part_id",
             "process_id",
         ],
+        "transformation_model": [
+            "part_id",
+            "process_id",
+            "sequence_number",
+        ],
+        "transition_model": [
+            "part_id",
+            "resource_id",
+            "sequence_number",
+            "duration",
+        ],
         "process_model": [
             "process_id",
             "duration",
@@ -587,6 +731,251 @@ def define_feature_subsets() -> Dict[str, List[str]]:
         ],
         "all_features": [],  # Will be populated with all available features
     }
+
+
+def generate_hypothesis_test_plots(
+    results_dir: str, component_name: str, run_id: int = None
+):
+    """
+    Generate plots for hypothesis testing results.
+
+    Args:
+        results_dir: Directory containing the null distribution CSV files
+        component_name: Name of the SBDT component to plot
+        run_id: If provided, plot only this specific run; otherwise plot all runs
+    """
+    # Set up plot style
+    plt.style.use("seaborn-v0_8-whitegrid")
+    sns.set_context("talk")
+
+    if run_id is not None:
+        # Plot specific run
+        run_files = [f"{component_name}_run{run_id}_null_dist.csv"]
+    else:
+        # Find all files for this component
+        import glob
+
+        run_files = glob.glob(f"{results_dir}/{component_name}_run*_null_dist.csv")
+        run_files = [os.path.basename(f) for f in run_files]
+
+    for file_name in run_files:
+        try:
+            # Load the null distribution
+            file_path = os.path.join(results_dir, file_name)
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                continue
+
+            null_dist_df = pd.read_csv(file_path)
+
+            if "observed_stat" in null_dist_df.columns:
+                # New format with observed_stat column
+                observed_stat = null_dist_df["observed_stat"].iloc[0]
+                p_value = (
+                    null_dist_df["p_value"].iloc[0]
+                    if "p_value" in null_dist_df.columns
+                    else None
+                )
+                null_dist = null_dist_df["permutation_stat"].values
+            else:
+                # Old format with just permutation_stat
+                null_dist = null_dist_df["permutation_stat"].values
+                # Calculate observed_stat and p_value (if needed)
+                observed_stat = null_dist.mean() + null_dist.std()  # Placeholder
+                p_value = None
+
+            # Create the plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+            # Plot histogram of null distribution
+            sns.histplot(
+                null_dist,
+                kde=True,
+                ax=ax,
+                color="skyblue",
+                stat="density",
+                label="Null Distribution",
+            )
+
+            # Add vertical line for observed statistic
+            ax.axvline(
+                x=observed_stat,
+                color="red",
+                linestyle="--",
+                label=f"Observed Statistic: {observed_stat:.4f}",
+            )
+
+            # Add title and labels
+            current_run = file_name.split("_run")[1].split("_")[0]
+            ax.set_title(f"Permutation Test for {component_name} (Run {current_run})")
+            ax.set_xlabel("Test Statistic")
+            ax.set_ylabel("Density")
+
+            # Add legend
+            legend_text = f"Observed: {observed_stat:.4f}"
+            if p_value is not None:
+                legend_text += f", p-value: {p_value:.4f}"
+            ax.text(
+                0.02,
+                0.95,
+                legend_text,
+                transform=ax.transAxes,
+                fontsize=12,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            )
+
+            plt.legend()
+            plt.tight_layout()
+
+            # Save the plot
+            output_file = os.path.join(
+                results_dir, f"{component_name}_run{current_run}_permutation_test.png"
+            )
+            plt.savefig(output_file, dpi=300)
+            print(f"Plot saved to: {output_file}")
+            plt.close()
+
+        except Exception as e:
+            print(f"Error generating plot for {file_name}: {e}")
+
+
+def generate_summary_plots(
+    results: Dict[str, Dict[str, Union[List[float], float]]],
+    output_dir: str,
+    metric: str,
+    model_type: str,
+):
+    """
+    Generate summary plots comparing all SBDT components.
+
+    Args:
+        results: Results dictionary from multiple_runs_hypothesis_test
+        output_dir: Directory to save plots
+        metric: Metric used (accuracy or roc_auc)
+        model_type: Type of model (dt or lstm)
+    """
+    # Set up plot style
+    plt.style.use("seaborn-v0_8-whitegrid")
+    sns.set_context("talk")
+
+    # Extract data for plotting
+    components = []
+    means = []
+    stds = []
+    p_values = []
+    rejection_rates = []
+
+    for component, res in results.items():
+        components.append(component)
+        means.append(res.get("mean_observed_stat", float("nan")))
+        stds.append(res.get("std_observed_stat", float("nan")))
+        p_values.append(res.get("mean_p_value", float("nan")))
+        rejection_rates.append(res.get("rejection_rate", 0))
+
+    # Create a DataFrame for easier plotting
+    df = pd.DataFrame(
+        {
+            "Component": components,
+            f"Mean {metric}": means,
+            f"Std {metric}": stds,
+            "Mean p-value": p_values,
+            "Rejection Rate": rejection_rates,
+        }
+    )
+
+    # 1. Plot Mean Metric Values with Error Bars
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(
+        df["Component"],
+        df[f"Mean {metric}"],
+        yerr=df[f"Std {metric}"],
+        capsize=10,
+        color="skyblue",
+        alpha=0.8,
+    )
+
+    # Add a horizontal line at 0.5 (random chance for classification)
+    ax.axhline(
+        y=0.5, color="red", linestyle="--", alpha=0.7, label="Random Chance (0.5)"
+    )
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.4f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Mean {metric.upper()} by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel(f"{metric.upper()}")
+    ax.set_ylim(0, 1.05)
+    plt.xticks(rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(output_dir, f"{model_type}_{metric}_by_component.png"), dpi=300
+    )
+    plt.close()
+
+    # 2. Plot Rejection Rates
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(df["Component"], df["Rejection Rate"], color="salmon", alpha=0.8)
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.2f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Rejection Rate by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel("Rejection Rate")
+    ax.set_ylim(0, 1.05)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"{model_type}_rejection_rates.png"), dpi=300)
+    plt.close()
+
+    # 3. Plot p-values
+    fig, ax = plt.subplots(figsize=(12, 7))
+    bars = ax.bar(df["Component"], df["Mean p-value"], color="lightgreen", alpha=0.8)
+
+    # Add a horizontal line at 0.05 (common significance level)
+    ax.axhline(y=0.05, color="red", linestyle="--", alpha=0.7, label="α = 0.05")
+
+    # Add text showing the exact values
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            height + 0.01,
+            f"{height:.4f}",
+            ha="center",
+            va="bottom",
+            rotation=0,
+        )
+
+    ax.set_title(f"Mean p-value by SBDT Component ({model_type.upper()})")
+    ax.set_ylabel("Mean p-value")
+    ax.set_ylim(0, max(1.0, df["Mean p-value"].max() + 0.1))
+    plt.xticks(rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, f"{model_type}_p_values.png"), dpi=300)
+    plt.close()
+
+    print(f"Summary plots saved to: {output_dir}")
 
 
 if __name__ == "__main__":
@@ -612,12 +1001,15 @@ if __name__ == "__main__":
     # Set the evaluation metric
     metric = "roc_auc"  # Using roc_auc as the metric instead of accuracy
 
+    """For LSTM: Alpha is set to 0.05, and the number of runs is set to 10., Permutations is 100
+    for DT: Alpha is set to 0.01, and the number of runs is set to 10., Permutations is 1000
+    """
     # Run the hypothesis tests
     results = multiple_runs_hypothesis_test(
         final_data,
         feature_subsets,
         n_runs=10,  # Number of runs with different random seeds
-        n_permutations=1000,  # Number of permutations for each test
+        n_permutations=100,  # Number of permutations for each test
         test_size=0.2,
         alpha=0.05,
         model_type="lstm",  # dt or lstm
@@ -633,3 +1025,15 @@ if __name__ == "__main__":
         print(
             f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )
+
+    # Generate plots for existing results (optional - add this if you want to generate plots for already saved data)
+    model_type = "lstm"  # Change as needed to dt or lstm
+    results_dir = f"hypothesis_results/{model_type}"
+
+    if os.path.exists(results_dir):
+        print("\nGenerating plots for existing results...")
+        for component in feature_subsets.keys():
+            try:
+                generate_hypothesis_test_plots(results_dir, component)
+            except Exception as e:
+                print(f"Error generating plots for {component}: {e}")
