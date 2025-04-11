@@ -50,12 +50,12 @@ def load_and_preprocess_data() -> pd.DataFrame:
         pd.DataFrame: Combined preprocessed dataset
     """
     real_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
     sim_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
