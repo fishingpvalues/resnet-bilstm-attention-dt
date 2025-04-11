@@ -50,12 +50,12 @@ def load_and_preprocess_data() -> pd.DataFrame:
         pd.DataFrame: Combined preprocessed dataset
     """
     real_data = pd.read_csv(
-        r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
     sim_data = pd.read_csv(
-        r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
@@ -1000,19 +1000,20 @@ if __name__ == "__main__":
 
     # Set the evaluation metric
     metric = "roc_auc"  # Using roc_auc as the metric instead of accuracy
+    model_type = "lstm"  # Change to "lstm" if you want to test with BiLSTM
 
-    """For LSTM: Alpha is set to 0.05, and the number of runs is set to 10., Permutations is 100
-    for DT: Alpha is set to 0.01, and the number of runs is set to 10., Permutations is 1000
+    """For LSTM: Alpha is set to 0.01, and the number of runs is set to 10., Permutations is 200
+    for DT: Alpha is set to 0.05, and the number of runs is set to 10., Permutations is 1000
     """
     # Run the hypothesis tests
     results = multiple_runs_hypothesis_test(
         final_data,
         feature_subsets,
         n_runs=10,  # Number of runs with different random seeds
-        n_permutations=100,  # Number of permutations for each test
+        n_permutations=200,  # Number of permutations for each test
         test_size=0.2,
-        alpha=0.05,
-        model_type="lstm",  # dt or lstm
+        alpha=0.01,
+        model_type=model_type,  # dt or lstm
         metric=metric,  # Pass the defined metric
         output_dir="hypothesis_results",
         max_depth=5,  # Additional parameter for the decision tree
@@ -1026,8 +1027,7 @@ if __name__ == "__main__":
             f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )
 
-    # Generate plots for existing results (optional - add this if you want to generate plots for already saved data)
-    model_type = "lstm"  # Change as needed to dt or lstm
+    # Generate plots for existing results (optional - add this if you want to generate plots for already saved data)  # Change as needed to dt or lstm
     results_dir = f"hypothesis_results/{model_type}"
 
     if os.path.exists(results_dir):
