@@ -42,101 +42,242 @@ from src.models.resnet_bilstm_attn.model import (
 )
 
 
-def load_and_preprocess_data() -> pd.DataFrame:
+def load_and_preprocess_data(
+    only_real=False, only_sim=False
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load and preprocess both real and simulated data.
+    Load and preprocess real and simulated data separately with consistent features.
+
+    Args:
+        only_real: If True, only load and process real data
+        only_sim: If True, only load and process simulated data
 
     Returns:
-        pd.DataFrame: Combined preprocessed dataset
+        Tuple of (real_data, sim_data) with identical feature sets, or a single DataFrame if only one type is requested
     """
-    real_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
-        parse_dates=["start_time", "end_time"],
-        index_col="process_execution_id",
-    )
-    sim_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
-        parse_dates=["start_time", "end_time"],
-        index_col="process_execution_id",
-    )
+    # Load data based on parameters
+    real_data = None
+    sim_data = None
 
-    # Set target variable and calculate duration for real data
-    real_data["is_valid"] = 1
-    real_data["duration"] = (
-        real_data["end_time"] - real_data["start_time"]
-    ).dt.total_seconds()
-    print(f"Real data shape: {real_data.shape}")
-
-    # Set target variable and calculate duration for simulated data
-    sim_data["is_valid"] = 0
-    sim_data["duration"] = (
-        sim_data["end_time"] - sim_data["start_time"]
-    ).dt.total_seconds()
-    print(f"Simulated data shape: {sim_data.shape}")
-
-    # Apply preprocessing functions only to real data
-    real_data = unify_and_drop_part_ids(real_data)
-    real_data = unify_and_drop_process_types(real_data)
-    real_data = unify_and_filter_resources(real_data)
-    real_data = filter_data(real_data)
-
-    # Combine datasets
-    final_data = pd.concat([real_data, sim_data]).fillna(0)
-
-    # Ensure time columns are datetime
-    final_data["start_time"] = pd.to_datetime(
-        final_data["start_time"], utc=True, errors="coerce"
-    )
-    final_data["end_time"] = pd.to_datetime(
-        final_data["end_time"], utc=True, errors="coerce"
-    )
-
-    # Apply KPI features and sort
-    final_data = (
-        add_kpi_features(final_data)
-        .sort_values(
-            by=["end_time", "order_id", "sequence_number"],
-            key=lambda col: col.dt.normalize() if col.name == "end_time" else col,
+    if not only_sim:
+        print("\n----- Loading Real Data -----")
+        real_data = pd.read_csv(
+            r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+            parse_dates=["start_time", "end_time"],
+            index_col="process_execution_id",
         )
-        .reset_index(drop=True)
-    )
-    print(f"is_valid counts: {final_data['is_valid'].value_counts().to_dict()}")
+        real_data["is_valid"] = 1
+        real_data["duration"] = (
+            real_data["end_time"] - real_data["start_time"]
+        ).dt.total_seconds()
+        print(f"Raw real data shape: {real_data.shape}")
 
-    return final_data
+    if not only_real:
+        print("\n----- Loading Simulated Data -----")
+        sim_data = pd.read_csv(
+            r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+            parse_dates=["start_time", "end_time"],
+            index_col="process_execution_id",
+        )
+        sim_data["is_valid"] = 0
+        sim_data["duration"] = (
+            sim_data["end_time"] - sim_data["start_time"]
+        ).dt.total_seconds()
+        print(f"Raw simulated data shape: {sim_data.shape}")
+
+    # Process each dataset individually
+    if real_data is not None:
+        print("\n----- Processing Real Data -----")
+        real_data = preprocess_dataset(real_data, "real")
+
+    if sim_data is not None:
+        print("\n----- Processing Simulated Data -----")
+        sim_data = preprocess_dataset(sim_data, "simulated")
+
+    # Align feature sets between datasets
+    if real_data is not None and sim_data is not None:
+        real_data, sim_data = align_features(real_data, sim_data)
+
+    # Return based on requested data
+    if only_real:
+        return real_data
+    elif only_sim:
+        return sim_data
+    else:
+        return real_data, sim_data
+
+
+def preprocess_dataset(df: pd.DataFrame, dataset_name: str) -> pd.DataFrame:
+    """Apply all preprocessing steps to a dataset."""
+    print(f"Initial {dataset_name} data shape: {df.shape}")
+
+    try:
+        # Apply standard preprocessing
+        df = unify_and_drop_part_ids(df)
+        df = unify_and_drop_process_types(df)
+        df = unify_and_filter_resources(df)
+
+        # For simulated data, apply a more lenient filtering or manually add the time features
+        if dataset_name == "real":
+            # Apply normal filtering for real data
+            df = filter_data(df)
+        else:
+            # For simulated data
+            try:
+                # Save a copy in case filtering removes everything
+                df_before_filter = df.copy()
+
+                # Try using filter_data (which adds time features)
+                df = filter_data(df)
+
+                # If filtering removed all rows, manually add time features to the unfiltered data
+                if len(df) == 0:
+                    print(
+                        "Warning: filter_data() removed all simulated data. Adding time features manually."
+                    )
+                    df = df_before_filter
+
+                    # Manually add the time-based features that filter_data would have added
+                    # Convert datetime to hour of day (0-23)
+                    df["hour_of_day"] = df["start_time"].dt.hour
+
+                    # Add cyclical encoding of hour of day (sin and cos)
+                    df["hour_of_day_sin"] = np.sin(2 * np.pi * df["hour_of_day"] / 24)
+                    df["hour_of_day_cos"] = np.cos(2 * np.pi * df["hour_of_day"] / 24)
+
+                    # Get day of week (0=Monday, 6=Sunday)
+                    df["day_of_week"] = df["start_time"].dt.dayofweek
+
+                    # Add cyclical encoding of day of week (sin and cos)
+                    df["day_of_week_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+                    df["day_of_week_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+
+                    # Add is_break indicator (time between 11:30-13:30 or after 16:30)
+                    hour = df["start_time"].dt.hour
+                    minute = df["start_time"].dt.minute
+                    time_value = hour + minute / 60
+                    df["is_break"] = ((time_value >= 11.5) & (time_value <= 13.5)) | (
+                        time_value >= 16.5
+                    )
+
+                    # Add is_not_weekday indicator (Saturday or Sunday)
+                    df["is_not_weekday"] = df["day_of_week"] >= 5
+
+                    # Add unix timestamps
+                    df["start_time_unix"] = df["start_time"].astype(np.int64) // 10**9
+                    df["end_time_unix"] = df["end_time"].astype(np.int64) // 10**9
+
+                    # Add sequence_number if it doesn't exist
+                    if "sequence_number" not in df.columns:
+                        print(
+                            "Adding sequence_number to simulated data (matching filter_data logic)"
+                        )
+                        # Use EXACTLY the same logic as in filter_data()
+                        df["sequence_number"] = (
+                            df.sort_values(by=["start_time"])
+                            .groupby("process_execution_id")
+                            .cumcount()
+                            + 1
+                        )
+            except Exception as e:
+                print(f"Error during simulated data processing: {e}")
+                # If anything goes wrong, make sure we at least add sequence_number
+                if "sequence_number" not in df.columns:
+                    print("Adding sequence_number to simulated data after error")
+                    df = df.sort_values("start_time")
+                    df["sequence_number"] = range(1, len(df) + 1)
+
+        # Generate KPI features for both types of data
+        df = add_kpi_features(df)
+
+        print(f"Preprocessed {dataset_name} data shape: {df.shape}")
+        print(f"Features: {sorted(df.columns.tolist())}")
+
+    except Exception as e:
+        print(f"Error preprocessing {dataset_name} data: {e}")
+        print(f"Exception details: {str(e)}")
+        print("Continuing with partially processed data")
+
+        # Last resort: ensure sequence_number exists
+        if "sequence_number" not in df.columns:
+            print("Adding sequence_number as last resort")
+            df = df.sort_values("start_time")
+            df["sequence_number"] = range(1, len(df) + 1)
+
+    return df
+
+
+def align_features(
+    real_df: pd.DataFrame, sim_df: pd.DataFrame
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Ensure both datasets have identical feature sets."""
+    print("\n----- Aligning Features -----")
+
+    # Get all unique columns from both datasets
+    all_columns = set(real_df.columns) | set(sim_df.columns)
+    print(f"Total unique columns across datasets: {len(all_columns)}")
+
+    # Add missing columns to each dataset
+    for col in all_columns:
+        # Add to real data if missing
+        if col not in real_df.columns:
+            print(f"Adding missing column '{col}' to real data")
+            if col in [
+                "hour_of_day_cos",
+                "hour_of_day_sin",
+                "day_of_week_cos",
+                "day_of_week_sin",
+            ]:
+                real_df[col] = 0.0  # Default for cyclical features
+            elif col in ["is_break", "is_not_weekday"]:
+                real_df[col] = False  # Default for boolean features
+            elif pd.api.types.is_numeric_dtype(sim_df[col]):
+                real_df[col] = 0  # Default for numeric features
+            else:
+                real_df[col] = sim_df[col].iloc[0]  # Use first value from sim data
+
+        # Add to sim data if missing
+        if col not in sim_df.columns:
+            print(f"Adding missing column '{col}' to simulated data")
+            if col in [
+                "hour_of_day_cos",
+                "hour_of_day_sin",
+                "day_of_week_cos",
+                "day_of_week_sin",
+            ]:
+                sim_df[col] = 0.0  # Default for cyclical features
+            elif col in ["is_break", "is_not_weekday"]:
+                sim_df[col] = False  # Default for boolean features
+            elif pd.api.types.is_numeric_dtype(real_df[col]):
+                sim_df[col] = 0  # Default for numeric features
+            else:
+                sim_df[col] = real_df[col].iloc[0]  # Use first value from real data
+
+    # Sort columns to ensure identical order
+    sorted_columns = sorted(all_columns)
+    real_df = real_df[sorted_columns]
+    sim_df = sim_df[sorted_columns]
+
+    print(f"Aligned real data shape: {real_df.shape}")
+    print(f"Aligned simulated data shape: {sim_df.shape}")
+    print(f"Features match: {set(real_df.columns) == set(sim_df.columns)}")
+
+    return real_df, sim_df
 
 
 def perform_identical_real_data_test() -> pd.DataFrame:
     """
     Performs the 'Identical Data Test' using only real data to validate the framework.
-
-    This function takes only the preprocessed real data, duplicates it, assigns different labels
-    to the copies, and prepares a dataset where the underlying features are identical for both
-    classes. This tests whether the model is learning artifacts rather than actual differences
-    between real and simulated data.
-
-    Returns:
-        pd.DataFrame: Test dataset with only real data but different labels
     """
     print("\n===== PERFORMING IDENTICAL REAL DATA TEST =====")
-    # Load only the real data
-    real_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
-        parse_dates=["start_time", "end_time"],
-        index_col="process_execution_id",
-    )
 
-    # Set target variable and calculate duration for real data
-    real_data["is_valid"] = 1
-    real_data["duration"] = (
-        real_data["end_time"] - real_data["start_time"]
-    ).dt.total_seconds()
+    # Load and preprocess only real data
+    real_data = load_and_preprocess_data(only_real=True)
     print(f"Original real data shape: {real_data.shape}")
 
-    # Apply preprocessing functions to real data
-    real_data = unify_and_drop_part_ids(real_data)
-    real_data = unify_and_drop_process_types(real_data)
-    real_data = unify_and_filter_resources(real_data)
-    real_data = filter_data(real_data)
+    # Verify we have data
+    if len(real_data) == 0:
+        raise ValueError("No real data available after preprocessing!")
 
     # Create a copy of the real data
     real_data_copy = real_data.copy()
@@ -147,23 +288,24 @@ def perform_identical_real_data_test() -> pd.DataFrame:
     # Combine the original and the copy
     combined_data = pd.concat([real_data, real_data_copy]).fillna(0)
 
-    # Ensure time columns are datetime
-    combined_data["start_time"] = pd.to_datetime(
-        combined_data["start_time"], utc=True, errors="coerce"
-    )
-    combined_data["end_time"] = pd.to_datetime(
-        combined_data["end_time"], utc=True, errors="coerce"
-    )
+    # Reset index to avoid ambiguity between index and columns
+    combined_data = combined_data.reset_index(drop=False)
 
-    # Apply KPI features and sort
-    combined_data = (
-        add_kpi_features(combined_data)
-        .sort_values(
-            by=["end_time", "order_id", "sequence_number"],
+    # Sort if needed
+    sort_columns = [
+        "end_time",
+        "sequence_number",
+    ]  # Removed order_id to avoid ambiguity
+    valid_sort_columns = [col for col in sort_columns if col in combined_data.columns]
+
+    if valid_sort_columns:
+        combined_data = combined_data.sort_values(
+            by=valid_sort_columns,
             key=lambda col: col.dt.normalize() if col.name == "end_time" else col,
-        )
-        .reset_index(drop=True)
-    )
+        ).reset_index(drop=True)
+    else:
+        combined_data = combined_data.reset_index(drop=True)
+
     print(f"Combined identical real data shape: {combined_data.shape}")
     print(f"is_valid counts: {combined_data['is_valid'].value_counts().to_dict()}")
 
@@ -173,28 +315,16 @@ def perform_identical_real_data_test() -> pd.DataFrame:
 def perform_identical_sim_data_test() -> pd.DataFrame:
     """
     Performs the 'Identical Data Test' using only simulated data to validate the framework.
-
-    This function takes only the preprocessed simulated data, duplicates it, assigns different
-    labels to the copies, and prepares a dataset where the underlying features are identical for
-    both classes. This tests whether the model is finding patterns within the simulated data itself.
-
-    Returns:
-        pd.DataFrame: Test dataset with only simulated data but different labels
     """
     print("\n===== PERFORMING IDENTICAL SIMULATED DATA TEST =====")
-    # Load only the simulation data
-    sim_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
-        parse_dates=["start_time", "end_time"],
-        index_col="process_execution_id",
-    )
 
-    # Set target variable and calculate duration for sim data
-    sim_data["is_valid"] = 0
-    sim_data["duration"] = (
-        sim_data["end_time"] - sim_data["start_time"]
-    ).dt.total_seconds()
+    # Load and preprocess only simulated data
+    sim_data = load_and_preprocess_data(only_sim=True)
     print(f"Original simulated data shape: {sim_data.shape}")
+
+    # Verify we have data
+    if len(sim_data) == 0:
+        raise ValueError("No simulated data available after preprocessing!")
 
     # Create a copy of the sim data
     sim_data_copy = sim_data.copy()
@@ -205,29 +335,24 @@ def perform_identical_sim_data_test() -> pd.DataFrame:
     # Combine the original and the copy
     combined_data = pd.concat([sim_data, sim_data_copy]).fillna(0)
 
-    # Ensure time columns are datetime
-    combined_data["start_time"] = pd.to_datetime(
-        combined_data["start_time"], utc=True, errors="coerce"
-    )
-    combined_data["end_time"] = pd.to_datetime(
-        combined_data["end_time"], utc=True, errors="coerce"
-    )
+    # Reset index to avoid ambiguity between index and columns
+    combined_data = combined_data.reset_index(drop=False)
 
-    # Apply KPI features and sort - check if columns exist before sorting
-    combined_data = add_kpi_features(combined_data)
+    # Sort if needed
+    sort_columns = [
+        "end_time",
+        "sequence_number",
+    ]  # Removed order_id to avoid ambiguity
 
-    # Check which sort columns exist in the dataframe
-    sort_columns = ["end_time", "order_id", "sequence_number"]
+    # Make sure the sort columns exist
     valid_sort_columns = [col for col in sort_columns if col in combined_data.columns]
 
-    # Only sort by columns that exist
     if valid_sort_columns:
         combined_data = combined_data.sort_values(
             by=valid_sort_columns,
             key=lambda col: col.dt.normalize() if col.name == "end_time" else col,
         ).reset_index(drop=True)
     else:
-        # If no valid sort columns, just reset index
         combined_data = combined_data.reset_index(drop=True)
 
     print(f"Combined identical sim data shape: {combined_data.shape}")
@@ -1112,7 +1237,8 @@ def generate_summary_plots(
 if __name__ == "__main__":
     # Load and preprocess data
     print("Loading and preprocessing data...")
-    final_data = load_and_preprocess_data()
+    real_data, sim_data = load_and_preprocess_data()
+    final_data = pd.concat([real_data, sim_data]).fillna(0)
     print(f"Dataset shape: {final_data.shape}")
 
     # Define feature subsets

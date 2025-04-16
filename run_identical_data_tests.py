@@ -6,15 +6,15 @@ based on meaningful differences or just learning artifacts in the data.
 
 import os
 import time
-import pandas as pd
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 from hypothesis_testing_twosampletest import (
-    perform_identical_real_data_test,
-    perform_identical_sim_data_test,
     define_feature_subsets,
     multiple_runs_hypothesis_test,
+    perform_identical_real_data_test,
+    perform_identical_sim_data_test,
 )
 
 # Create output directory
@@ -46,7 +46,7 @@ for model_type in ["dt", "lstm"]:
         additional_params = {"max_depth": 5}
     else:  # lstm
         n_runs = 10  # Fewer runs for LSTM due to computational intensity
-        n_permutations = 200
+        n_permutations = 1000
         alpha = 0.01
         additional_params = {"n_epochs": 10, "batch_size": 32}
 

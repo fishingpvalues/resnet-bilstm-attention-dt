@@ -1,0 +1,78 @@
+Summary Results for DT Model
+==================================================
+
+Test on Identical Real Data:
+------------------------------
+time_model:
+  Mean roc_auc: 0.3175
+  Mean p-value: 0.9997
+  Rejection rate: 0.00
+
+resource_model:
+  Mean roc_auc: 0.3824
+  Mean p-value: 0.9947
+  Rejection rate: 0.00
+
+transformation_model:
+  Mean roc_auc: 0.3892
+  Mean p-value: 0.9972
+  Rejection rate: 0.00
+
+transition_model:
+  Mean roc_auc: 0.3429
+  Mean p-value: 0.9996
+  Rejection rate: 0.00
+
+process_model:
+  Mean roc_auc: 0.3446
+  Mean p-value: 0.9995
+  Rejection rate: 0.00
+
+kpi_based:
+  Mean roc_auc: 0.3402
+  Mean p-value: 0.9999
+  Rejection rate: 0.00
+
+all_features:
+  Mean roc_auc: 0.3184
+  Mean p-value: 1.0000
+  Rejection rate: 0.00
+
+
+Test on Identical Simulated Data:
+------------------------------
+time_model:
+  Mean roc_auc: 0.3452
+  Mean p-value: 0.9999
+  Rejection rate: 0.00
+
+resource_model:
+  Mean roc_auc: 0.4105
+  Mean p-value: 0.9982
+  Rejection rate: 0.00
+
+transformation_model:
+  Mean roc_auc: 0.4098
+  Mean p-value: 0.9989
+  Rejection rate: 0.00
+
+transition_model:
+  Mean roc_auc: 0.4054
+  Mean p-value: 0.9991
+  Rejection rate: 0.00
+
+process_model:
+  Mean roc_auc: 0.4183
+  Mean p-value: 0.9948
+  Rejection rate: 0.00
+
+kpi_based:
+  Mean roc_auc: 0.3777
+  Mean p-value: 0.9998
+  Rejection rate: 0.00
+
+all_features:
+  Mean roc_auc: 0.3733
+  Mean p-value: 1.0000
+  Rejection rate: 0.00
+
