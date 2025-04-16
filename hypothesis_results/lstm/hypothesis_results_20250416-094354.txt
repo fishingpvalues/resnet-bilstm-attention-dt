@@ -1,0 +1,50 @@
+Hypothesis Testing Results
+========================
+Model: lstm
+Metric: roc_auc
+Runs: 10
+Permutations: 1000
+Alpha: 0.01
+
+Component: time_model
+  Mean roc_auc: 1.0000
+  Std roc_auc: 0.0000
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
+Component: resource_model
+  Mean roc_auc: 0.9898
+  Std roc_auc: 0.0222
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
+Component: transformation_model
+  Mean roc_auc: 0.9519
+  Std roc_auc: 0.1443
+  Mean p-value: 0.0274
+  Rejection rate: 0.90
+
+Component: transition_model
+  Mean roc_auc: 0.9688
+  Std roc_auc: 0.0891
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
+Component: process_model
+  Mean roc_auc: 0.9998
+  Std roc_auc: 0.0005
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
+Component: kpi_based
+  Mean roc_auc: 0.9993
+  Std roc_auc: 0.0010
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
+Component: all_features
+  Mean roc_auc: 1.0000
+  Std roc_auc: 0.0000
+  Mean p-value: 0.0000
+  Rejection rate: 1.00
+
