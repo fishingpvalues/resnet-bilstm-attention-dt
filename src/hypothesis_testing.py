@@ -1010,7 +1010,7 @@ if __name__ == "__main__":
         final_data,
         feature_subsets,
         n_runs=10,  # Number of runs with different random seeds
-        n_permutations=200,  # Number of permutations for each test
+        n_permutations=1000,  # Number of permutations for each test
         test_size=0.2,
         alpha=0.01,
         model_type=model_type,  # dt or lstm
@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
     # Print final conclusions
     print("\nFinal conclusions:")
     for component, res in results.items():
-        conclusion = "INACCURATE" if res["rejection_rate"] > 0.9 else "ACCURATE"
+        conclusion = "INACCURATE" if res["rejection_rate"] > 0.5 else "ACCURATE"
         print(
             f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )
