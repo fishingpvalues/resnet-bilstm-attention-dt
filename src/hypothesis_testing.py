@@ -50,12 +50,12 @@ def load_and_preprocess_data() -> pd.DataFrame:
         pd.DataFrame: Combined preprocessed dataset
     """
     real_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
     sim_data = pd.read_csv(
-        r"C:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+        r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
@@ -1010,7 +1010,7 @@ if __name__ == "__main__":
         final_data,
         feature_subsets,
         n_runs=10,  # Number of runs with different random seeds
-        n_permutations=200,  # Number of permutations for each test
+        n_permutations=1000,  # Number of permutations for each test
         test_size=0.2,
         alpha=0.01,
         model_type=model_type,  # dt or lstm
@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
     # Print final conclusions
     print("\nFinal conclusions:")
     for component, res in results.items():
-        conclusion = "INACCURATE" if res["rejection_rate"] > 0.9 else "ACCURATE"
+        conclusion = "INACCURATE" if res["rejection_rate"] > 0.5 else "ACCURATE"
         print(
             f"SBDT Component '{component}': {conclusion} (Rejection Rate: {res['rejection_rate']:.2f}, Mean {metric.upper()}: {res['mean_observed_stat']:.4f})"
         )
