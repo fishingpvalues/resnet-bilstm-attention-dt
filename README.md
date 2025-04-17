@@ -41,6 +41,39 @@ Data contains detailed manufacturing operations including:
 - Baseline models (Decision Tree) and advanced deep learning models
 - Visualization of model performance and validation metrics
 
+## Hypothesis Testing
+
+The project includes two hypothesis testing frameworks to evaluate the quality of simulated data:
+
+### 1. Standard Hypothesis Testing
+
+Tests whether each SBDT (Structured Business Digital Twin) component can distinguish between real and simulated data:
+
+```bash
+python src/hypothesis_testing.py
+```
+
+This runs permutation tests on different feature subsets and generates:
+
+- P-values showing statistical significance
+- Component-wise plots showing the null distribution
+- Summary plots comparing rejection rates across components
+
+### 2. Identical Data Testing
+
+Validates the testing framework using identical data with different labels:
+
+```bash
+python run_identical_data_tests.py
+```
+
+This performs two tests:
+
+- Real vs. Real (labeled as Sim) test - Expected to show no distinguishable difference
+- Sim vs. Sim (labeled as Real) test - Expected to show no distinguishable difference
+
+Results are stored in the `identical_data_test_results` directory.
+
 ## Requirements
 
 - Python 3.12+
@@ -49,13 +82,14 @@ Data contains detailed manufacturing operations including:
 
 ## Installation
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
+
     ```bash
     git clone https://github.com/fishingpvalues/resnet-bilstm-attention-dt.git
     cd resnet-bilstm-attention-dt
     ```
 
-2.  **Set up the environment and install dependencies:** Choose **one** of the following methods:
+2. **Set up the environment and install dependencies:** Choose **one** of the following methods:
 
     **Method A: Using UV (Recommended for exact reproducibility)**
 
@@ -110,6 +144,7 @@ Once installed, run the main script:
 
 ```bash
 python main.py
+```
 
 This command will execute two pipelines:
 
@@ -138,33 +173,48 @@ This command will execute two pipelines:
 
 - 10 Epochs sufficient
 
-## File Tree
+## File Structure
 
 ```text
 ResNet-BiLSTM-Attention-DT/
-├── README.md [README.md](d:\resnet-bilstm-attention-dt\README.md)
+├── README.md
 ├── LICENSE
-├── datasrc/
+├── main.py                      <— Entry point for running the main pipeline
+├── run_identical_data_tests.py  <— Script for identical data hypothesis testing
+├── hypothesis_testing_twosampletest.py <— Two-sample hypothesis testing implementation
+├── BiLSTM_model.pth             <— Saved model weights
+├── classes.png                  <— Architecture diagram
+├── pyproject.toml               <— Project dependencies
+├── uv.lock                      <— Locked dependencies for reproducibility
+│
+├── datasrc/                     <— Source data files
 │   ├── real/
 │   │   ├── real_factorydata.csv
-│   │   └── real_factorydata_oclog.csv
+│   │   ├── real_factorydata_oclog.csv
+│   │   ├── part_mapping.json    <— Mapping files for data processing
+│   │   └── ...
 │   └── sim/
 │       └── simulated_data_oclog.csv
-├── src/
-│   ├── main.py
-│   ├── validate.ipynb
-│   ├── connector/
-│   │   └── ofact/
-│   │       └── _put_in_ofact_project_folder/
-│   │           └── output_structure.py
-│   ├── models/
-│   │   ├── resnet_bilstm_attn/     <— Deep learning model implementation
-│   │   └── decisiontree/           <— Baseline model implementation
-│   ├── data/                     <— Data processing and feature engineering tools
-│   └── utils/
-│       └── reporting.py
-├── puml_output/
-│   ├── classes.puml
-│   └── packages.puml
-└── decision_tree/                <— Contains decision tree related resources
+│
+├── src/                         <— Source code
+│   ├── hypothesis_testing.py    <— Standard hypothesis testing implementation
+│   ├── validate.ipynb           <— Validation notebook
+│   ├── connector/               <— External system connectors
+│   ├── models/                  <— Model implementations
+│   │   ├── resnet_bilstm_attn/  <— Deep learning model
+│   │   └── decisiontree/        <— Baseline model
+│   ├── data/                    <— Data processing utilities
+│   └── utils/                   <— Helper utilities
+│
+├── hypothesis_results/          <— Standard hypothesis test results
+│   ├── dt/                      <— Decision tree results
+│   └── lstm/                    <— BiLSTM results with permutation test plots
+│
+├── identical_data_test_results/ <— Results from identical data tests
+│   ├── real_dt/                 <— Decision tree on identical real data
+│   ├── real_lstm/               <— BiLSTM on identical real data
+│   ├── sim_dt/                  <— Decision tree on identical simulated data
+│   └── sim_lstm/                <— BiLSTM on identical simulated data
+│
+└── decision_tree/               <— Decision tree related resources
 ```
