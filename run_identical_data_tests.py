@@ -5,10 +5,17 @@ based on meaningful differences or just learning artifacts in the data.
 """
 
 import os
+import sys
 import time
 
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# Add the parent directory to sys.path to import other modules
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 from hypothesis_testing_twosampletest import (
     define_feature_subsets,
@@ -16,9 +23,10 @@ from hypothesis_testing_twosampletest import (
     perform_identical_real_data_test,
     perform_identical_sim_data_test,
 )
+from src.utils.config import get_identical_results_dir
 
 # Create output directory
-output_dir = "identical_data_test_results"
+output_dir = get_identical_results_dir()
 os.makedirs(output_dir, exist_ok=True)
 
 print("Starting identical data tests...")

@@ -41,6 +41,7 @@ from src.models.resnet_bilstm_attn.model import (
     train_model,
 )
 from src.utils.reporting import generate_report
+from utils.config import get_real_data_path, get_sim_data_path
 
 
 def run_baseline_pipeline(final_data):
@@ -91,16 +92,24 @@ def run_bilstm_pipeline(final_data):
 
 def main():
     try:
+        # Use path resolution functions instead of hardcoded paths
+        real_data_path = get_real_data_path()
+        sim_data_path = get_sim_data_path()
+
+        logging.info(f"Loading real data from: {real_data_path}")
         real_data = pd.read_csv(
-            r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+            real_data_path,
             parse_dates=["start_time", "end_time"],
             index_col="process_execution_id",
         )
+
+        logging.info(f"Loading simulated data from: {sim_data_path}")
         sim_data = pd.read_csv(
-            r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+            sim_data_path,
             parse_dates=["start_time", "end_time"],
             index_col="process_execution_id",
         )
+
         real_data["is_valid"] = 1
         real_data["duration"] = (
             real_data["end_time"] - real_data["start_time"]

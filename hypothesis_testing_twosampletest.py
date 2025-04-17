@@ -40,6 +40,12 @@ from src.models.resnet_bilstm_attn.model import (
     evaluate_model_with_preds,
     train_model,
 )
+from src.utils.config import (
+    get_identical_results_dir,
+    get_output_dir,
+    get_real_data_path,
+    get_sim_data_path,
+)
 
 
 def load_and_preprocess_data(
@@ -61,8 +67,10 @@ def load_and_preprocess_data(
 
     if not only_sim:
         print("\n----- Loading Real Data -----")
+        real_data_path = get_real_data_path()
+        print(f"Loading real data from: {real_data_path}")
         real_data = pd.read_csv(
-            r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+            real_data_path,
             parse_dates=["start_time", "end_time"],
             index_col="process_execution_id",
         )
@@ -74,8 +82,10 @@ def load_and_preprocess_data(
 
     if not only_real:
         print("\n----- Loading Simulated Data -----")
+        sim_data_path = get_sim_data_path()
+        print(f"Loading simulated data from: {sim_data_path}")
         sim_data = pd.read_csv(
-            r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+            sim_data_path,
             parse_dates=["start_time", "end_time"],
             index_col="process_execution_id",
         )
@@ -719,28 +729,22 @@ def multiple_runs_hypothesis_test(
     alpha: float = 0.01,
     model_type: str = "dt",
     metric: str = "accuracy",
-    output_dir: str = "hypothesis_results",
+    output_dir: str = None,
     **model_kwargs,
 ) -> Dict[str, Dict[str, Union[List[float], float]]]:
     """
     Perform hypothesis testing over multiple runs with different random seeds
     for various feature subsets.
-
-    Args:
-        df: Input dataframe
-        feature_subsets: Dictionary mapping component names to feature lists
-        n_runs: Number of runs with different random seeds
-        n_permutations: Number of permutations for each test
-        test_size: Proportion of data to use for testing
-        alpha: Significance level
-        model_type: Type of model ('dt' for decision tree, 'lstm' for BiLSTM)
-        metric: Metric to use ('accuracy' or 'roc_auc')
-        output_dir: Directory to save results
-        **model_kwargs: Additional arguments to pass to the model training function
-
-    Returns:
-        Dictionary containing results for each feature subset and run
     """
+    # Use configured output directory if none specified
+    if output_dir is None:
+        if (
+            "identical" in str(df).lower()
+        ):  # Heuristic to detect if this is an identical test
+            output_dir = str(get_identical_results_dir())
+        else:
+            output_dir = str(get_output_dir())
+
     # Create model-specific output directory
     model_output_dir = os.path.join(output_dir, model_type.lower())
     os.makedirs(model_output_dir, exist_ok=True)

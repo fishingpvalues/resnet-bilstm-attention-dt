@@ -40,6 +40,7 @@ from src.models.resnet_bilstm_attn.model import (
     evaluate_model_with_preds,
     train_model,
 )
+from src.utils.config import get_output_dir, get_real_data_path, get_sim_data_path
 
 
 def load_and_preprocess_data() -> pd.DataFrame:
@@ -49,13 +50,19 @@ def load_and_preprocess_data() -> pd.DataFrame:
     Returns:
         pd.DataFrame: Combined preprocessed dataset
     """
+    real_data_path = get_real_data_path()
+    sim_data_path = get_sim_data_path()
+
+    print(f"Loading real data from: {real_data_path}")
     real_data = pd.read_csv(
-        r"D:\resnet-bilstm-attention-dt\datasrc\real\real_factorydata_oclog.csv",
+        real_data_path,
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
+
+    print(f"Loading simulated data from: {sim_data_path}")
     sim_data = pd.read_csv(
-        r"D:\resnet-bilstm-attention-dt\datasrc\sim\simulated_data_oclog.csv",
+        sim_data_path,
         parse_dates=["start_time", "end_time"],
         index_col="process_execution_id",
     )
@@ -463,7 +470,7 @@ def multiple_runs_hypothesis_test(
     alpha: float = 0.01,
     model_type: str = "dt",
     metric: str = "accuracy",
-    output_dir: str = "hypothesis_results",
+    output_dir: str = None,
     **model_kwargs,
 ) -> Dict[str, Dict[str, Union[List[float], float]]]:
     """
@@ -485,6 +492,10 @@ def multiple_runs_hypothesis_test(
     Returns:
         Dictionary containing results for each feature subset and run
     """
+    # Use configured output directory if none specified
+    if output_dir is None:
+        output_dir = str(get_output_dir())
+
     # Create model-specific output directory
     model_output_dir = os.path.join(output_dir, model_type.lower())
     os.makedirs(model_output_dir, exist_ok=True)
