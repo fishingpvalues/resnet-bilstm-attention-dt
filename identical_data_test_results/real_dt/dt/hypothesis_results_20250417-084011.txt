@@ -1,0 +1,50 @@
+Hypothesis Testing Results
+========================
+Model: dt
+Metric: roc_auc
+Runs: 10
+Permutations: 1000
+Alpha: 0.05
+
+Component: time_model
+  Mean roc_auc: 0.3302
+  Std roc_auc: 0.0401
+  Mean p-value: 1.0000
+  Rejection rate: 0.00
+
+Component: resource_model
+  Mean roc_auc: 0.3916
+  Std roc_auc: 0.0184
+  Mean p-value: 0.9949
+  Rejection rate: 0.00
+
+Component: transformation_model
+  Mean roc_auc: 0.3903
+  Std roc_auc: 0.0123
+  Mean p-value: 0.9975
+  Rejection rate: 0.00
+
+Component: transition_model
+  Mean roc_auc: 0.3389
+  Std roc_auc: 0.0313
+  Mean p-value: 0.9999
+  Rejection rate: 0.00
+
+Component: process_model
+  Mean roc_auc: 0.3279
+  Std roc_auc: 0.0288
+  Mean p-value: 1.0000
+  Rejection rate: 0.00
+
+Component: kpi_based
+  Mean roc_auc: 0.3278
+  Std roc_auc: 0.0345
+  Mean p-value: 1.0000
+  Rejection rate: 0.00
+
+Component: all_features
+  Mean roc_auc: 0.3471
+  Std roc_auc: 0.0630
+  Mean p-value: 0.9994
+  Rejection rate: 0.00
+

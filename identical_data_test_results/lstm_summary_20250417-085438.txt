@@ -1,40 +1,40 @@
-Summary Results for DT Model
+Summary Results for LSTM Model
 ==================================================
 
 Test on Identical Real Data:
 ------------------------------
 time_model:
-  Mean roc_auc: 0.3175
-  Mean p-value: 0.9997
+  Mean roc_auc: 0.4992
+  Mean p-value: 0.8072
   Rejection rate: 0.00
 
 resource_model:
-  Mean roc_auc: 0.3824
-  Mean p-value: 0.9947
+  Mean roc_auc: 0.4989
+  Mean p-value: 0.7967
   Rejection rate: 0.00
 
 transformation_model:
-  Mean roc_auc: 0.3892
-  Mean p-value: 0.9972
+  Mean roc_auc: 0.5015
+  Mean p-value: 0.7309
   Rejection rate: 0.00
 
 transition_model:
-  Mean roc_auc: 0.3429
-  Mean p-value: 0.9996
+  Mean roc_auc: 0.4998
+  Mean p-value: 0.5544
   Rejection rate: 0.00
 
 process_model:
-  Mean roc_auc: 0.3446
-  Mean p-value: 0.9995
+  Mean roc_auc: 0.4752
+  Mean p-value: 0.7842
   Rejection rate: 0.00
 
 kpi_based:
-  Mean roc_auc: 0.3402
-  Mean p-value: 0.9999
+  Mean roc_auc: 0.4938
+  Mean p-value: 0.8466
   Rejection rate: 0.00
 
 all_features:
-  Mean roc_auc: 0.3184
+  Mean roc_auc: 0.5000
   Mean p-value: 1.0000
   Rejection rate: 0.00
 
@@ -42,37 +42,37 @@ all_features:
 Test on Identical Simulated Data:
 ------------------------------
 time_model:
-  Mean roc_auc: 0.3452
-  Mean p-value: 0.9999
+  Mean roc_auc: 0.5008
+  Mean p-value: 0.9413
   Rejection rate: 0.00
 
 resource_model:
-  Mean roc_auc: 0.4105
-  Mean p-value: 0.9982
+  Mean roc_auc: 0.5003
+  Mean p-value: 0.9458
   Rejection rate: 0.00
 
 transformation_model:
-  Mean roc_auc: 0.4098
-  Mean p-value: 0.9989
+  Mean roc_auc: 0.4980
+  Mean p-value: 0.9763
   Rejection rate: 0.00
 
 transition_model:
-  Mean roc_auc: 0.4054
-  Mean p-value: 0.9991
+  Mean roc_auc: 0.5007
+  Mean p-value: 0.9389
   Rejection rate: 0.00
 
 process_model:
-  Mean roc_auc: 0.4183
-  Mean p-value: 0.9948
+  Mean roc_auc: 0.4977
+  Mean p-value: 0.9812
   Rejection rate: 0.00
 
 kpi_based:
-  Mean roc_auc: 0.3777
-  Mean p-value: 0.9998
+  Mean roc_auc: 0.5027
+  Mean p-value: 0.9151
   Rejection rate: 0.00
 
 all_features:
-  Mean roc_auc: 0.3733
+  Mean roc_auc: 0.5000
   Mean p-value: 1.0000
   Rejection rate: 0.00
 
