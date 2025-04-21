@@ -318,7 +318,7 @@ The combination of traditional hypothesis testing with the Cauchy Combination Te
 
 This project was developed as part of the following academic research:
 
-Your Full Name. (2025). *Digital Twin Validation Through Deep Learning and Statistical Hypothesis Testing*. [PhD/Master's Thesis, Your University Name]. 
+Daniel Fischer. (2025). *Digital Twin Validation Through Deep Learning and Statistical Hypothesis Testing*. [PhD/Master's Thesis, Your University Name]. 
 Repository link: https://repository.university.edu/thesis/identifier
 
 For a detailed explanation of the methodology and theoretical background, please refer to the thesis.
@@ -329,18 +329,18 @@ For a detailed explanation of the methodology and theoretical background, please
 
 ```
 @software{ResNet-BiLSTM-Attention-DT,
-  author = {Your Full Name},
+  author = {Daniel Fischer},
   title = {ResNet-BiLSTM-Attention Digital Twin: A Framework for Validating Manufacturing Process Simulations},
   year = {2025},
   month = {4},
   version = {1.0.0},
-  publisher = {Your University or Institution},
+  publisher = {Hochschule Bielefeld},
   url = {https://github.com/fishingpvalues/resnet-bilstm-attention-dt},
   doi = {10.5281/zenodo.xxxxxxx}
 }
 
 @phdthesis{YourThesis2025,
-  author = {Your Full Name},
+  author = {Daniel Fischer},
   title = {Digital Twin Validation Through Deep Learning and Statistical Hypothesis Testing},
   school = {Your University Name},
   year = {2025},
@@ -352,7 +352,7 @@ For a detailed explanation of the methodology and theoretical background, please
 
 ### APA Style
 
-Your Full Name. (2025). *ResNet-BiLSTM-Attention Digital Twin: A Framework for Validating Manufacturing Process Simulations* (Version 1.0.0) [Computer software]. Your University or Institution. https://doi.org/10.5281/zenodo.xxxxxxx
+Daniel Fischer. (2025). *ResNet-BiLSTM-Attention Digital Twin: A Framework for Validating Manufacturing Process Simulations* (Version 1.0.0) [Computer software]. Hochschule Bielefeld. https://doi.org/10.5281/zenodo.xxxxxxx
 
 ## Community and Support
 
