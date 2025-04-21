@@ -1,0 +1,71 @@
+Hypothesis Testing Results
+========================
+Model: lstm
+Metric: roc_auc
+Runs: 10
+Permutations: 1000
+Alpha: 0.01
+
+Component: time_model
+  Mean roc_auc: 1.0000
+  Std roc_auc: 0.0000
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: resource_model
+  Mean roc_auc: 0.9945
+  Std roc_auc: 0.0071
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: transformation_model
+  Mean roc_auc: 1.0000
+  Std roc_auc: 0.0000
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: transition_model
+  Mean roc_auc: 0.9644
+  Std roc_auc: 0.1067
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: process_model
+  Mean roc_auc: 0.9714
+  Std roc_auc: 0.0858
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: kpi_based
+  Mean roc_auc: 0.9975
+  Std roc_auc: 0.0054
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
+Component: all_features
+  Mean roc_auc: 1.0000
+  Std roc_auc: 0.0000
+  Mean p-value: 0.0000
+  CCT p-value: 0.0000
+  Rejection rate: 1.00
+  Binomial test p-value: 0.0000
+  Binomial significant: True
+
